@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "nn-trainer"
+version = "0.1.0"
+description = ""
+authors = ["Vincent Eichhorn <vincent.eichhorn@student.hpi.uni-potsdam.de>"]
+readme = "README.md"
+packages = [{ include = "nnt" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+torch = ">=2.6.0,<3.0.0"
+numpy = ">=2.3.1,<3.0.0"
+ruff = ">=0.12.3,<0.13.0"
+pytest = ">=8.4.1,<9.0.0"
+pandas = ">=2.3.1,<3.0.0"
+huggingface = ">=0.0.1,<0.0.2"
+datasets = ">=4.0.0,<5.0.0"
+transformers = ">=4.53.2,<5.0.0"
+python-dotenv = ">=1.1.1,<2.0.0"
+streamlit = ">=1.46.1,<2.0.0"
+plotly = ">=6.2.0,<7.0.0"
+pytest-cov = "^6.2.1"
+evaluate = "^0.4.5"
+nltk = "^3.9.1"
+rouge-score = "^0.1.2"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
