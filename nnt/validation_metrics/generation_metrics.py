@@ -100,77 +100,84 @@ class RougeScore(ValidationMetric):
         finalize(): Finalizes the ROUGE score computation and returns the average score.
     """
 
-    def __init__(self, target_key: str = "references"):str = "references"):
-        """ """
+    def __init__(self, target_key: str = "references"):
+        """
         Initialize the RougeScore metric with the target key and ROUGE evaluator.
 
-        Args:rgs:
+        Args:
             target_key (str): Key for reference texts in the batch.
-        """        """
-        self.rouge = evaluate.load("rouge").rouge = evaluate.load("rouge")
+        """
+        self.rouge = evaluate.load("rouge")
         self.target_key = target_key
         self.scores = {}
 
-    def compute(self, predicted_batch) -> None:    def compute(self, predicted_batch: "PredictedBatch") -> None:
-        """atch
+    def compute(self, predicted_batch: "PredictedBatch") -> None:
+        """
         Compute the ROUGE score for the predicted batch.
 
-        Args:        references = predicted_batch.reference_data[self.target_key]
-            predicted_batch (PredictedBatch): Batch containing predictions and reference data.s = self.rouge.compute(predictions=generations, references=references)
+        Args:
+            predicted_batch (PredictedBatch): Batch containing predictions and reference data.
         """
-        generations = predicted_batch.prediction self.scores.setdefault(key, []).extend([float(value)] * len(generations))
+        generations = predicted_batch.prediction
         references = predicted_batch.reference_data[self.target_key]
         scores = self.rouge.compute(predictions=generations, references=references)
         for key, value in scores.items():
-            self.scores.setdefault(key, []).extend([float(value)] * len(generations))        Finalize the ROUGE score computation and return the average score.
+            self.scores.setdefault(key, []).extend([float(value)] * len(generations))
 
-    def finalize(self) -> dict:urns:
-        """es for each metric.
-        Finalize the ROUGE score computation and return the average score.        """
-t self.scores:
+    def finalize(self) -> dict:
+        """
+        Finalize the ROUGE score computation and return the average score.
+
         Returns:
-            dict: Dictionary with the average ROUGE scores for each metric.urn {key: sum(values) / len(values) for key, values in self.scores.items()}
+            dict: Dictionary with the average ROUGE scores for each metric.
         """
         if not self.scores:
             return {key: 0.0 for key in self.rouge.metrics}
         return {key: sum(values) / len(values) for key, values in self.scores.items()}
-n tasks using METEOR score.
+
 
 class MeteorScore(ValidationMetric):
-    """        target_key (str): The key in the predicted batch that contains the target text.
+    """
     MeteorScore is a validation metric for evaluating the quality of text generation tasks using METEOR score.
-:
-    Args:ted batch.
-        target_key (str): The key in the predicted batch that contains the target text.        finalize(): Finalizes the METEOR score computation and returns the average score.
+
+    Args:
+        target_key (str): The key in the predicted batch that contains the target text.
 
     Methods:
-        compute(predicted_batch): Computes the METEOR score for the predicted batch.nit__(self, target_key: str = "references"):
+        compute(predicted_batch): Computes the METEOR score for the predicted batch.
         finalize(): Finalizes the METEOR score computation and returns the average score.
-    """ey and METEOR evaluator.
+    """
 
-    def __init__(self, target_key: str = "references"):        Args:
-        """            target_key (str): Key for reference texts in the batch.
+    def __init__(self, target_key: str = "references"):
+        """
         Initialize the MeteorScore metric with the target key and METEOR evaluator.
- self.meteor = evaluate.load("meteor")
+
         Args:
-            target_key (str): Key for reference texts in the batch.        self.scores = []
+            target_key (str): Key for reference texts in the batch.
         """
         self.meteor = evaluate.load("meteor")
-        self.target_key = target_key        from nnt.validators.validator import PredictedBatch
+        self.target_key = target_key
         self.scores = []
 
-    def compute(self, predicted_batch) -> None:
-        """ scores = self.meteor.compute(predictions=generations, references=references)
-        Compute the METEOR score for the predicted batch.        self.scores.extend([float(scores["meteor"])] * len(generations))
+    def compute(self, predicted_batch: "PredictedBatch") -> None:
+        """
+        Compute the METEOR score for the predicted batch.
 
-        Args:alize(self) -> dict:
+        Args:
             predicted_batch (PredictedBatch): Batch containing predictions and reference data.
-        """        Finalize the METEOR score computation and return the average score.
+        """
         generations = predicted_batch.prediction
         references = predicted_batch.reference_data[self.target_key]
-        scores = self.meteor.compute(predictions=generations, references=references) dict: Dictionary with the average METEOR score.
+        scores = self.meteor.compute(predictions=generations, references=references)
         self.scores.extend([float(scores["meteor"])] * len(generations))
 
-    def finalize(self) -> dict:eor": 0.0}
-        """        return {"meteor": sum(self.scores) / len(self.scores)}
-        Finalize the METEOR score computation and return the average score.        Returns:            dict: Dictionary with the average METEOR score.        """        if not self.scores:            return {"meteor": 0.0}        return {"meteor": sum(self.scores) / len(self.scores)}
+    def finalize(self) -> dict:
+        """
+        Finalize the METEOR score computation and return the average score.
+
+        Returns:
+            dict: Dictionary with the average METEOR score.
+        """
+        if not self.scores:
+            return {"meteor": 0.0}
+        return {"meteor": sum(self.scores) / len(self.scores)}
