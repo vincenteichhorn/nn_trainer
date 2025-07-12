@@ -54,9 +54,9 @@ def test_validator_validate_returns_metric_result(mock_datasplit):
     validator = TestValidator(model, val_args, mock_datasplit, metrics=[metric])
 
     results = validator.validate()
-    assert "dummy_metric" in results
-    assert isinstance(results["dummy_metric"], float)
-    assert abs(results["dummy_metric"] - 4.0) < 1e-5
+    assert "DummyMetric" in results
+    assert isinstance(results["DummyMetric"], float)
+    assert abs(results["DummyMetric"] - 4.0) < 1e-5
 
 
 def test_validator_batch_to_device_moves_tensor(mock_datasplit):

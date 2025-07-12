@@ -16,28 +16,44 @@ from plotly.subplots import make_subplots
 
 
 class NvidiaProfiler(Profiler):
-    """ "
-    Profiler for gpu energy consumption as context manager using nvidia-smi.
-    The Profiler starts a seperate process for profiling using nvidia-smi.
-    If one enters the context the parallel process gets started and it waits until the profiling got some data before continuing
-    the execution inside the context. If the context closes all data is collected and the seperate process gets killed.
-
-    Args:
-        interval (int): milliseconds interval of profiler steps
-        cache_file (str or None): file path to store the profiling data in a csv file. If None the data is stored in memory
-            and collected when the profiler context exits otherwise a csv file is created and the data is written to it and read from it
-            after the context exits
-        force_cache (bool): if True the cache file will be overwritten if it already exists
     """
+    Profiler for GPU energy consumption as a context manager using nvidia-smi.
+    Starts a separate process for profiling using nvidia-smi, collects power and memory usage, and supports caching results.
+
+    Example:
+        with NvidiaProfiler(interval=10) as prof:
+            # ... run your GPU code ...
+        df = prof.to_pandas()
+        print(df.head())
+    """
+
+    interval: float
+    data: list
+    should_profiling_run: Value
+    profiling_started: Event
+    profiling_stopped: Event
+    result_handler: ResultHandler
+    process: Process
+    gpu_clock_speed: int | None
 
     def __init__(
         self,
         interval: int = 1,
         cache_file: str | None = None,
         force_cache: bool = False,
-        gpu_clock_speed: int | None = None,  # in MHz, set to None to not change the clock speed
-        read_only: bool = False,  # if True the profiler will not start the process and only read the data from the cache file
+        gpu_clock_speed: int | None = None,
+        read_only: bool = False,
     ):
+        """
+        Initialize the NvidiaProfiler.
+
+        Args:
+            interval (int): Interval in milliseconds for profiler steps.
+            cache_file (str or None): File path to store profiling data in a CSV file.
+            force_cache (bool): If True, overwrite the cache file if it exists.
+            gpu_clock_speed (int or None): Set GPU clock speed in MHz (optional).
+            read_only (bool): If True, only read data from cache file, do not start profiling process.
+        """
         self.interval: float = interval
         self.data: List[Tuple[int, datetime, float]] = []
         self.should_profiling_run: Value = Value("i", 1)  # type: ignore
@@ -69,7 +85,7 @@ class NvidiaProfiler(Profiler):
 
     def __del__(self):
         """
-        Destructor to ensure the process is terminated if the object is deleted.
+        Destructor to ensure the process is terminated and GPU clock speed is reset if the object is deleted.
         """
         if self.process.is_alive():
             self.process.terminate()
@@ -82,9 +98,10 @@ class NvidiaProfiler(Profiler):
         """
         Set GPU clock speed to a specific value.
         This doesn't guarantee a fixed value due to throttling, but can help reduce variance.
+
         Args:
-            gpu_id (int): the id of the gpu to set the clock speed for
-            clock_speed (int): the clock speed in MHz to set
+            gpu_id (int): The GPU ID to set the clock speed for.
+            clock_speed (int): The clock speed in MHz to set.
         """
         # check if sudo nvidia-smi is available
         if subprocess.getstatusoutput("sudo nvidia-smi")[0] != 0:
@@ -96,6 +113,9 @@ class NvidiaProfiler(Profiler):
     def reset_gpu_clock_speed(self, gpu_id: int) -> None:
         """
         Reset GPU clock speed to default values.
+
+        Args:
+            gpu_id (int): The GPU ID to reset.
         """
         if subprocess.getstatusoutput("sudo nvidia-smi")[0] != 0:
             # warnings.warn("could not reset gpu clock speed, sudo nvidia-smi command not found. assure sudo rights.")
@@ -103,7 +123,15 @@ class NvidiaProfiler(Profiler):
         subprocess.run(f"sudo nvidia-smi -pm ENABLED -i {gpu_id}", shell=True)
         subprocess.run(f"sudo nvidia-smi -rgc -i {gpu_id}", shell=True)
 
-    def record_step(self, name):
+    def record_step(self, name: str) -> None:
+        """
+        Record a named step for profiling and add a marker to the result handler.
+
+        Args:
+            name (str): The name of the step to record.
+        Raises:
+            ValueError: If name is '__unset__'.
+        """
         if name == "__unset__":
             raise ValueError("Cannot record step with name '__unset__'. Use a different name.")
         super().record_step(name)
@@ -111,18 +139,21 @@ class NvidiaProfiler(Profiler):
 
     @staticmethod
     def _nvidiasmi_profiling_process(
-        should_run: Value, started: Event, stopped: Event, result_handler: ResultHandler, interval: int  # type: ignore
-    ):
+        should_run: Value,
+        started: Event,
+        stopped: Event,
+        result_handler: ResultHandler,
+        interval: int,
+    ) -> None:
         """
-        Static method for the seperate profiling process. Use this method in a multiprocessing process.
-        Opens a subprocess with nvidia-smi and saves gpu_id, timestamp and power for every interval seconds and puts these values in the queue.
+        Static method for the separate profiling process. Opens a subprocess with nvidia-smi and saves GPU ID, timestamp, power, and memory for every interval.
 
         Args:
-            should_run (multiprocessing.Value (int)): should be 1 initially to run the subprocess, change it to 0 to stop the profiling
-            started (multiprocessing.Event): notifies the process starter that profiling runs
-            stopped (multiprocessing.Event): notifies the process starter that profiling ended
-            queue (multiprocessing.Queue): handles the shared memory, call queue.get() to the firt put in (gpu_id, timestamp, power and used memory)
-            interval (int): the interval in milliseconds the profiler should check nvidia-smi
+            should_run (multiprocessing.Value): Set to 1 to run, 0 to stop profiling.
+            started (multiprocessing.Event): Notifies when profiling starts.
+            stopped (multiprocessing.Event): Notifies when profiling ends.
+            result_handler (ResultHandler): Handles shared memory for results.
+            interval (int): Interval in milliseconds for nvidia-smi polling.
         """
 
         def read_data(ln):
@@ -160,13 +191,22 @@ class NvidiaProfiler(Profiler):
         nvidiasmi_process.terminate()
         nvidiasmi_process.wait()
 
-    def __enter__(self):
+    def __enter__(self) -> "NvidiaProfiler":
+        """
+        Start the profiling process and wait until profiling has started.
+
+        Returns:
+            NvidiaProfiler: The profiler instance.
+        """
         assert subprocess.getstatusoutput("nvidia-smi")[0] == 0, "Could not find nvidia-smi tool"
         self.process.start()
         self.profiling_started.wait()
         return self
 
-    def __exit__(self, *args, **kwargs):
+    def __exit__(self, *args, **kwargs) -> None:
+        """
+        Stop the profiling process, collect all data, and terminate the process.
+        """
         self.should_profiling_run.value = 0
         self.profiling_stopped.wait()
         self.data = self.result_handler.get_all()
@@ -174,21 +214,26 @@ class NvidiaProfiler(Profiler):
         self.process.terminate()
         self.data = self._data_post_process(self.data)
 
-    def start(self):
+    def start(self) -> None:
+        """
+        Start profiling (calls __enter__).
+        """
         self.__enter__()
 
-    def stop(self):
+    def stop(self) -> None:
+        """
+        Stop profiling (calls __exit__).
+        """
         self.__exit__()
 
-    def _data_post_process(
-        self, data: List[Tuple[int, datetime, float, float, str]]
-    ) -> List[Tuple[int, datetime, float, float]]:
+    def _data_post_process(self, data: list) -> list:
         """
-        Post processes the data
+        Post-process the data to associate each measurement with the correct record step.
+
         Args:
-            data (List[Tuple[int, datetime, float, float, str]]): the data to post process
+            data (List[Tuple[int, datetime, float, float, str]]): Raw data to post-process.
         Returns:
-            List[Tuple[int, datetime, float, float]]: the post processed data with gpu_id, timestamp, power, memory and record_step
+            List[Tuple[int, datetime, float, float]]: Processed data with GPU ID, timestamp, power, memory, and record step.
         """
         processed_data: List[Tuple[int, datetime, float, float]] = []
         current_record_step: str = self.record_steps[0][1] if hasattr(self, "record_steps") else "__init__"
@@ -205,16 +250,12 @@ class NvidiaProfiler(Profiler):
     @staticmethod
     def from_cache(cache_file: str) -> "NvidiaProfiler":
         """
-        creates a NvidiaProfiler object from a cache file.
-        Note that only the data is loaded from the cache file, the profiler object is not
-        started and the record_steps will be empty but
-        available in the data directly.
+        Create a NvidiaProfiler object from a cache file. Only loads data; does not start profiling.
 
         Args:
-            cache_file (str): the path to the cache file
-
+            cache_file (str): Path to the cache file.
         Returns:
-            NvidiaProfiler: the NvidiaProfiler object with the data from the cache file
+            NvidiaProfiler: Profiler object with loaded data.
         """
         prof = NvidiaProfiler(cache_file=cache_file, read_only=True)
         prof.data = prof.result_handler.get_all()
@@ -223,39 +264,40 @@ class NvidiaProfiler(Profiler):
 
     def to_pandas(self) -> pd.DataFrame:
         """
-        generates a pandas dataframe from the profiled data
+        Generate a pandas DataFrame from the profiled data.
 
         Returns:
-            pandas DataFrame containing columns gpu_index, timestamp, power (in watts), memory (in MiB)
+            pd.DataFrame: DataFrame with columns gpu_id, timestamp, power (W), memory (MiB), record_step.
         """
         df: pd.DataFrame = pd.DataFrame(self.data, columns=["gpu_id", "timestamp", "power", "memory", "record_step"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%d %H:%M:%S.%f", errors="coerce")
         return df
 
-    def get_profiled_gpus(self) -> List[int]:
+    def get_profiled_gpus(self) -> list:
         """
+        Get a list of all GPU IDs that were profiled.
+
         Returns:
-            a list of all gpu ids which got profiled
+            List[int]: List of profiled GPU IDs.
         """
         df: pd.DataFrame = self.to_pandas()
         return df["gpu_id"].unique().tolist()
 
     def get_total_energy(
         self,
-        gpu_ids: List[int] | None = None,
-        record_steps: List[str] | None = None,
+        gpu_ids: list | None = None,
+        record_steps: list | None = None,
         return_data: bool = False,
     ) -> float:
         """
-        summes the power to get the total energy
+        Sum the power to get the total energy for specified GPUs and record steps.
 
         Args:
-            gpu_id (List[int]): the ids of the gpu to calculate the total energy for (default = None, the first gpu id is used)
-            record_steps (List[str]): records_steps to include in the summation (default = None, all record_steps will be included)
-            return_data (bool): whether to return the raw data of the selection (default = False)
+            gpu_ids (List[int], optional): GPU IDs to calculate energy for. Defaults to first GPU.
+            record_steps (List[str], optional): Record steps to include. Defaults to all.
+            return_data (bool, optional): If True, return raw data for each record step.
         Returns:
-            the total energy recorded in watt seconds
-            if return_data is True the list of measurements for each record_step in watt seconds is returned
+            float or list: Total energy in watt-seconds, or list of measurements if return_data is True.
         """
         if not self.data:
             return 0.0
@@ -273,19 +315,19 @@ class NvidiaProfiler(Profiler):
 
     def get_total_time(
         self,
-        gpu_ids: List[int] | None = None,
-        record_steps: List[str] | None = None,
+        gpu_ids: list | None = None,
+        record_steps: list | None = None,
         return_data: bool = False,
     ) -> float:
         """
-        calculates the total profiling time in seconds for the given gpu_ids and record_steps
+        Calculate the total profiling time in seconds for specified GPUs and record steps.
 
         Args:
-            gpu_id (List[int]): the ids of the gpu to calculate the time for (default = None, the first gpu id is used)
-            record_steps (List[str]): records_steps to include in the summation (default = None, all record_steps will be included)
-            return_data (bool): whether to return the raw data of the selection (default = False)
+            gpu_ids (List[int], optional): GPU IDs to calculate time for. Defaults to first GPU.
+            record_steps (List[str], optional): Record steps to include. Defaults to all.
+            return_data (bool, optional): If True, return raw data for each record step.
         Returns:
-            the total profiling time in seconds
+            float or list: Total profiling time in seconds, or list of measurements if return_data is True.
         """
         if not self.data:
             return 0.0
@@ -300,16 +342,17 @@ class NvidiaProfiler(Profiler):
         return (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
 
     def get_max_memory(
-        self, gpu_id: int | None = None, record_steps: List[str] | None = None, return_data: bool = False
+        self, gpu_id: int | None = None, record_steps: list | None = None, return_data: bool = False
     ) -> float:
         """
-        get average memory usage by gpu_id
+        Get the maximum memory usage for a specified GPU and record steps.
 
         Args:
-            gpu_id (int): the id of the gpu to calculate the avg memeory usage for (default = None, the first gpu id is used)
-
+            gpu_id (int, optional): GPU ID to calculate max memory for. Defaults to first GPU.
+            record_steps (List[str], optional): Record steps to include. Defaults to all.
+            return_data (bool, optional): If True, return raw data for each record step.
         Returns:
-            the avgerage memory usage in MiB
+            float or list: Maximum memory usage in MiB, or list of measurements if return_data is True.
         """
         if not self.data:
             return 0.0
@@ -324,16 +367,17 @@ class NvidiaProfiler(Profiler):
         return df["memory"].max()
 
     def get_mean_memory(
-        self, gpu_id: int | None = None, record_steps: List[str] | None = None, return_data: bool = False
+        self, gpu_id: int | None = None, record_steps: list | None = None, return_data: bool = False
     ) -> float:
         """
-        get average memory usage by gpu_id
+        Get the average memory usage for a specified GPU and record steps.
 
         Args:
-            gpu_id (int): the id of the gpu to calculate the avg memeory usage for (default = None, the first gpu id is used)
-
+            gpu_id (int, optional): GPU ID to calculate average memory for. Defaults to first GPU.
+            record_steps (List[str], optional): Record steps to include. Defaults to all.
+            return_data (bool, optional): If True, return raw data for each record step.
         Returns:
-            the avgerage memory usage in MiB
+            float or list: Average memory usage in MiB, or list of measurements if return_data is True.
         """
         if not self.data:
             return 0.0
@@ -349,7 +393,10 @@ class NvidiaProfiler(Profiler):
 
     def get_time_series_plot(self) -> go.Figure:
         """
-        Creates a plotly figure with the recorded time series data
+        Create a Plotly figure with the recorded time series data for power and memory usage.
+
+        Returns:
+            plotly.graph_objects.Figure: The generated time series plot.
         """
         if not self.data:
             return None

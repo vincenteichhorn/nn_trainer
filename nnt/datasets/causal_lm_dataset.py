@@ -1,40 +1,80 @@
 from abc import abstractmethod
 import copy
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 from nnt.datasets.dataset import DataSplit, Dataset
 from nnt.util.monitor import Monitor
+from transformers import PreTrainedTokenizer
 
 
 class LMConversation:
+    """
+    Represents a chat-style conversation for language modeling tasks.
+    Stores turns, input IDs, and labels, and provides methods for formatting and tokenization.
+
+    Example:
+        conv = LMConversation()
+        conv.add_turn("user", "Hello").add_turn("assistant", "Hi!")
+        print(conv.chat)
+    """
+
+    chat: list
+    input_ids: list
+    labels: list
 
     def __init__(self):
+        """
+        Initialize the LMConversation with empty chat, input_ids, and labels.
+        """
         self.chat = []
         self.input_ids = []
         self.labels = []
 
     def to_dict(self) -> Dict[str, str]:
+        """
+        Convert the conversation to a dictionary format.
+
+        Returns:
+            dict: The chat as a dictionary.
+        """
         return self.chat
 
     def to_sample(self) -> Dict[str, Union[List[int], List[str]]]:
         """
-        Convert the conversation to a sample format.
+        Convert the conversation to a sample format with input_ids and labels.
+
         Returns:
-            Dict: A dictionary containing input_ids and labels.
+            dict: Dictionary containing input_ids, labels, and chat.
         """
         return {"input_ids": self.input_ids, "labels": self.labels, "chat": self.chat}
 
-    def add_turn(self, role: str, content: str):
+    def add_turn(self, role: str, content: str) -> "LMConversation":
         """
         Add a turn to the conversation.
+
         Args:
             role (str): The role of the speaker (e.g., "user", "assistant").
             content (str): The content of the turn.
+        Returns:
+            LMConversation: The updated conversation.
         """
         self.chat.append({"role": role, "content": content})
         return self
 
-    def apply_chat_template_and_tokenize(self, tokenizer, assistant_labels_only: bool = True, loss_mask_token: int = -100):
+    def apply_chat_template_and_tokenize(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        assistant_labels_only: bool = True,
+        loss_mask_token: int = -100,
+    ) -> None:
+        """
+        Apply a chat template and tokenize the conversation using the provided tokenizer.
+        Optionally mask non-assistant tokens for loss computation.
 
+        Args:
+            tokenizer: Tokenizer object with chat_template support.
+            assistant_labels_only (bool): If True, mask non-assistant tokens.
+            loss_mask_token (int): Token to use for masking.
+        """
         assert all("role" in el and "content" in el for el in self.chat), "Chat must have 'role' and 'content' keys."
 
         def maybe_apply_chat_template(chat, add_generation_prompt, continue_final_message):
@@ -76,26 +116,48 @@ class LMConversation:
         self.input_ids = input_ids
         self.labels = labels
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """
+        String representation of the LMConversation.
+        """
         return f"LMConversation({self.chat})"
 
 
 class CausalLMDataset(Dataset):
+    """
+    Dataset class for causal language modeling tasks with chat-style formatting and tokenization.
+
+    Args:
+        assisten_labels_only (bool): If True, mask non-assistant tokens for loss.
+        verbose (bool): If True, print formatting progress.
+
+    Example:
+        ds = CausalLMDataset()
+        ds.prepare(tokenizer)
+        print(ds['train'][0])
+    """
+
+    assistant_labels_only: bool
+    loss_mask_token: int
+    verbose: bool
 
     def __init__(self, assisten_labels_only: bool = True, verbose: bool = False, *args, **kwargs):
+        """
+        Initialize the CausalLMDataset.
+        """
         self.assistant_labels_only = assisten_labels_only
         self.loss_mask_token = -100
         self.verbose = verbose
         super().__init__(*args, **kwargs)
 
-    def prepare(self, tokenizer):
+    def prepare(self, tokenizer: PreTrainedTokenizer) -> None:
         """
-        Format and tokenize the provided examples.
+        Format and tokenize the provided examples for all splits.
+
         Args:
-            examples (datasets.Dataset): The examples to format and tokenize.
-            split (str): The split where the examples are from.
+            tokenizer: Tokenizer object for formatting and tokenization.
         Returns:
-            DataSplit with two new columns: "input_ids" and "labels".
+            None
         """
         self.load_if_not_loaded()
         monitor = Monitor()
@@ -127,11 +189,12 @@ class CausalLMDataset(Dataset):
                         monitor.print(f"| {ln}")
 
     @abstractmethod
-    def build_chat(sample, split_name) -> LMConversation:
+    def build_chat(sample: Dict[str, Any], split_name: str) -> LMConversation:
         """
-        build chat from example
+        Build a chat from an example for a given split.
+
         Args:
-            example (Dict): The example to build the chat from.
+            sample (dict): The example to build the chat from.
             split_name (str): The name of the split.
         Returns:
             LMConversation: The chat built from the example.
@@ -145,8 +208,15 @@ from datasets import load_dataset
 
 
 class AlpacaDataset(CausalLMDataset):
+    """
+    Dataset class for the Alpaca instruction-following dataset.
+    Splits data into train and validation sets and formats as chat conversations.
+    """
 
-    def load(self):
+    def load(self) -> None:
+        """
+        Load the Alpaca dataset and split into train and validation sets.
+        """
         alpaca_ds = load_dataset("tatsu-lab/alpaca")
         validation_size = len(alpaca_ds["train"]) // 10
         self["train"] = DataSplit.from_iterable(alpaca_ds["train"].select(range(len(alpaca_ds["train"]) - validation_size)))
@@ -154,11 +224,12 @@ class AlpacaDataset(CausalLMDataset):
             alpaca_ds["train"].select(range(len(alpaca_ds["train"]) - validation_size, len(alpaca_ds["train"])))
         )
 
-    def build_chat(self, sample, split_name) -> LMConversation:
+    def build_chat(self, sample: Dict[str, Any], split_name: str) -> LMConversation:
         """
-        Build chat from example.
+        Build a chat from an Alpaca example.
+
         Args:
-            sample (Dict): The example to build the chat from.
+            sample (dict): The example to build the chat from.
             split_name (str): The name of the split.
         Returns:
             LMConversation: The chat built from the example.
@@ -170,13 +241,26 @@ class AlpacaDataset(CausalLMDataset):
 
 
 class AlpacaSmallDatasetTruncated(AlpacaDataset):
+    """
+    Truncated version of the Alpaca dataset for quick experiments.
+    Limits the number of samples and truncates tokenized sequences to max_len.
+    """
 
-    def __init__(self, num_samples=1000, max_len=10, *args, **kwargs):
+    num_samples: int
+    max_len: int
+
+    def __init__(self, num_samples: int = 1000, max_len: int = 10, *args, **kwargs):
+        """
+        Initialize the truncated Alpaca dataset.
+        """
         super().__init__(*args, **kwargs)
         self.num_samples = num_samples
         self.max_len = max_len
 
-    def load(self):
+    def load(self) -> None:
+        """
+        Load and truncate the Alpaca dataset to num_samples and max_len.
+        """
         alpaca_ds = load_dataset("tatsu-lab/alpaca")
         validation_size = self.num_samples // 10
         self["train"] = DataSplit.from_iterable(alpaca_ds["train"].select(range(self.num_samples - validation_size)))
@@ -184,7 +268,10 @@ class AlpacaSmallDatasetTruncated(AlpacaDataset):
             alpaca_ds["train"].select(range(self.num_samples - validation_size, self.num_samples))
         )
 
-    def prepare(self, tokenizer):
+    def prepare(self, tokenizer: PreTrainedTokenizer) -> None:
+        """
+        Format and tokenize, then truncate input_ids and labels to max_len for all splits.
+        """
         super().prepare(tokenizer)
 
         # iterate all splits and samples and trucate to 10 tokens
@@ -196,14 +283,33 @@ class AlpacaSmallDatasetTruncated(AlpacaDataset):
 
 
 class GlueDatasets(CausalLMDataset):
+    """
+    Dataset class for GLUE benchmark tasks, with chat-style formatting and tokenization.
+
+    Args:
+        task_name (str): Name of the GLUE task.
+        train_set_size (int, optional): Number of training samples to use.
+    """
+
+    task_name: str
+    train_set_size: Union[int, None]
 
     def __init__(self, task_name: str, train_set_size: Union[int, None] = None, *args, **kwargs):
+        """
+        Initialize the GlueDatasets for a specific GLUE task.
+        """
         self.task_name = task_name
         self.train_set_size = train_set_size
         super().__init__(*args, **kwargs)
         assert task_name in self.available_tasks(), f"Task {task_name} not available."
 
-    def available_tasks(self):
+    def available_tasks(self) -> list:
+        """
+        Get the list of available GLUE tasks.
+
+        Returns:
+            list: List of task names.
+        """
         return [
             "cola",
             "sst2",
@@ -216,7 +322,15 @@ class GlueDatasets(CausalLMDataset):
             "wnli",
         ]
 
-    def get_task_classes(self, task=None):
+    def get_task_classes(self, task: str = None) -> list:
+        """
+        Get the class labels for the specified GLUE task.
+
+        Args:
+            task (str, optional): Task name. Defaults to self.task_name.
+        Returns:
+            list: List of class labels for the task.
+        """
         if task is None:
             task = self.task_name
 
@@ -239,7 +353,12 @@ class GlueDatasets(CausalLMDataset):
         elif task == "qqp":
             return ["No", "Yes"]
 
-    def load(self):
+    def load(self) -> Any:
+        """
+        Load the GLUE dataset for the specified task and split into train, validation, and generation sets.
+        Returns:
+            datasets.DatasetDict: The loaded dataset.
+        """
         ds = load_dataset("nyu-mll/glue", self.task_name)
         if "mnli" in self.task_name:
             train_ds = load_dataset("nyu-mll/glue", "mnli")
@@ -250,7 +369,16 @@ class GlueDatasets(CausalLMDataset):
         self["generation"] = DataSplit.from_iterable(ds["validation"])
         return ds
 
-    def build_chat(self, example, split_name):
+    def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
+        """
+        Build a chat from a GLUE example for a given split.
+
+        Args:
+            example (dict): The example to build the chat from.
+            split_name (str): The name of the split.
+        Returns:
+            LMConversation: The chat built from the example.
+        """
         joined_classes = ", ".join(self.get_task_classes())
         assistant_content = self.get_task_classes()[example["label"]]
         if self.task_name == "cola":

@@ -23,6 +23,22 @@ from nnt.util.monitor import Monitor
 
 @dataclass
 class TrainingArguments:
+    """
+    Data class for storing training configuration arguments.
+
+    Attributes:
+        num_epochs (int): Number of epochs to train.
+        batch_size (int): Batch size for training.
+        data_collator (callable, optional): Function to collate data batches.
+        learning_rate (float): Learning rate for optimizer.
+        weight_decay (float): Weight decay for optimizer.
+        monitor_strategy (Literal["steps", "epochs"]): Strategy for monitoring training progress.
+        monitor_every (int): Frequency of monitoring.
+        checkpoint_strategy (Literal["steps", "epochs"]): Strategy for saving checkpoints.
+        checkpoint_every (int): Frequency of checkpointing.
+        model_save_function (callable, optional): Custom function to save the model.
+    """
+
     num_epochs: int
     batch_size: int
     data_collator: callable = None
@@ -36,6 +52,17 @@ class TrainingArguments:
 
 
 class Trainer:
+    """
+    Trainer class for managing the training loop, callbacks, and model saving.
+
+    Args:
+        output_dir (str): Directory to save outputs and checkpoints.
+        model: PyTorch model to be trained.
+        training_args (TrainingArguments): Training configuration arguments.
+        train_data (DataSplit): Training dataset split.
+        optimizer (torch.optim.Optimizer, optional): Optimizer for training.
+        callbacks (List[TrainerCallback], optional): List of callback objects.
+    """
 
     def __init__(
         self,
@@ -46,6 +73,9 @@ class Trainer:
         optimizer: torch.optim.Optimizer = None,
         callbacks: List[TrainerCallback] = [],
     ):
+        """
+        Initialize the Trainer object and set up directories, optimizer, and device.
+        """
         self.output_dir = output_dir
         self.model = model
         self.training_args = training_args
@@ -67,13 +97,31 @@ class Trainer:
         self.model_input_parameter_names = list(inspect.signature(self.model.forward).parameters.keys())
 
     def _call_callbacks(self, name: str, info: dict):
+        """
+        Call the specified callback method for all registered callbacks.
+
+        Args:
+            name (str): Name of the callback method to call.
+            info (dict): Information dictionary to pass to the callback.
+        """
         for callback in self.callbacks:
             getattr(callback, name)(info, self)
 
     def _batch_to_device(self, batch):
+        """
+        Move batch tensors to the appropriate device (CPU or GPU).
+
+        Args:
+            batch (dict): Batch of data.
+        Returns:
+            dict: Batch with tensors moved to device.
+        """
         return {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
     def _prepare_data(self):
+        """
+        Prepare the training data loader and set up the data collator.
+        """
 
         if self.training_args.data_collator is None:
             self.training_args.data_collator = PlainDataCollator(input_variable_names=self.model_input_parameter_names)
@@ -85,6 +133,13 @@ class Trainer:
         )
 
     def _save_model(self, global_step: int, checkpiont=False):
+        """
+        Save the model state to disk, either as a checkpoint or final model.
+
+        Args:
+            global_step (int): Current global training step.
+            checkpiont (bool): Whether to save as a checkpoint.
+        """
         save_folder = (
             os.path.join(self.output_dir, "checkpoints", "checkpoint-" + str(global_step))
             if checkpiont
@@ -97,9 +152,18 @@ class Trainer:
             torch.save(self.model.state_dict(), os.path.join(save_folder, "model.pth"))
 
     def stop(self):
+        """
+        Signal the trainer to stop training early.
+        """
         self._should_stop = True
 
     def train(self):
+        """
+        Run the main training loop, handling epochs, batches, callbacks, and model saving.
+
+        Returns:
+            model: The trained model.
+        """
 
         self._prepare_data()
 

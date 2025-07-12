@@ -15,8 +15,41 @@ if TYPE_CHECKING:
 
 
 class FLOPsBudgetControllCallback(TrainerCallback):
+    """
+    Callback for monitoring and controlling FLOPs budget during training.
+    Tracks FLOPs per step, accumulates total FLOPs, and stops training if budget is exceeded.
+    Logs step and cumulative FLOPs to a CSV file for analysis.
+
+    Args:
+        output_dir (str): Directory to save FLOPs logs.
+        budget (int, optional): FLOPs budget for training. If exceeded, training stops.
+        should_stop_training (bool): Whether to stop training when budget is exceeded.
+
+    Example:
+        callback = FLOPsBudgetControllCallback(output_dir="./logs", budget=1e12)
+        trainer = Trainer(..., callbacks=[callback])
+        trainer.train()
+    """
+
+    output_dir: str
+    budget: int
+    flops_memorization_table: dict
+    should_stop_training: bool
+    flop_budget_file: str
+    fast_csv_writer: FastCSV
+    fast_writer_has_set_columns: bool
+    skip_info_keys: list
+    cumulative_flops: int
 
     def __init__(self, output_dir: str, budget: int = None, should_stop_training: bool = True):
+        """
+        Initialize the FLOPsBudgetControllCallback and set up logging.
+
+        Args:
+            output_dir (str): Directory to save FLOPs logs.
+            budget (int, optional): FLOPs budget for training.
+            should_stop_training (bool): Whether to stop training when budget is exceeded.
+        """
         super().__init__()
         self.output_dir = output_dir
         self.budget = budget
@@ -30,10 +63,25 @@ class FLOPsBudgetControllCallback(TrainerCallback):
         self.skip_info_keys = ["current_batch"]
         self.cumulative_flops = 0
 
-    def _batch_signature(self, batch):
+    def _batch_signature(self, batch: dict) -> str:
+        """
+        Generate a signature for the batch based on tensor shapes for FLOPs memorization.
+
+        Args:
+            batch (dict): Batch of input tensors.
+        Returns:
+            str: Signature string representing batch shapes.
+        """
         str(tuple(batch[k].shape for k in batch if isinstance(batch[k], torch.Tensor)))
 
-    def on_step_begin(self, info, trainer: "Trainer"):
+    def on_step_begin(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Compute and log FLOPs for the current step, update cumulative FLOPs, and stop training if budget exceeded.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         batch = info["current_batch"]
         signature = self._batch_signature(batch)
         model = trainer.model

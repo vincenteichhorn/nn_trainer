@@ -7,10 +7,23 @@ from nnt.profiling.profiler import Profiler
 
 
 class TorchProfiler(profile, Profiler):
+    """
+    Subclass of torch.profiler.profile and Profiler for advanced profiling of PyTorch models.
+    Provides methods to extract, summarize, and analyze profiling data, including FLOPs, memory usage, and timing for CPU and CUDA devices.
+
+    Attributes:
+        numeric_columns (list): List of metric columns to extract from profiler events.
+    """
+
     # pylint: disable=W0212:protected-access
     """subclass of (torch.profiler) profile"""
 
+    numeric_columns: list
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize the TorchProfiler with default profiling options and metric columns.
+        """
         defaults = {
             "with_flops": True,
             "profile_memory": True,
@@ -33,17 +46,23 @@ class TorchProfiler(profile, Profiler):
             "cpu_memory_usage",
         ]
 
-    def _get_profiler_events(self) -> EventList[FunctionEvent]:
-        """Ensures the profiler has function events and returns them."""
+    def _get_profiler_events(self) -> EventList:
+        """
+        Ensure the profiler has function events and return them.
+
+        Returns:
+            EventList[FunctionEvent]: List of function events from the profiler.
+        """
         assert self.profiler, "Profiling not stopped correctly"
         self.profiler._ensure_function_events()
         return self.profiler._function_events
 
     def to_pandas(self) -> pd.DataFrame:
-        """converts profiler events to pandas dataframe
+        """
+        Convert profiler events to a pandas DataFrame.
 
         Returns:
-            pd.DataFrame() containing row-wise all events (calculations like aten::mm) with metrics
+            pd.DataFrame: DataFrame containing row-wise events (e.g., calculations like aten::mm) with metrics.
         """
         matched_events = self._get_profiler_events_by_record_step()
 
@@ -67,10 +86,11 @@ class TorchProfiler(profile, Profiler):
         return df
 
     def summary(self) -> pd.DataFrame:
-        """generates a summary as a pandas dataframe
+        """
+        Generate a summary as a pandas DataFrame, grouping and summing metrics by event type.
 
         Returns:
-            pd.DataFrame() containing summed metrics for all event types (e.g. aten::mul, aten::mm)
+            pd.DataFrame: DataFrame containing summed metrics for all event types (e.g., aten::mul, aten::mm).
         """
         df: pd.DataFrame = self.to_pandas()
         df = df[~df["is_annotation"]]
@@ -79,10 +99,11 @@ class TorchProfiler(profile, Profiler):
         return df
 
     def totals(self) -> pd.Series:
-        """sums all metrics for the whole profiling
+        """
+        Sum all metrics for the whole profiling session.
 
         Returns:
-            pd.Series containing the total sums with keys
+            pd.Series: Series containing the total sums for each metric.
         """
         df: pd.DataFrame = self.to_pandas()
         df = df[~df["is_annotation"]]
@@ -90,11 +111,13 @@ class TorchProfiler(profile, Profiler):
         return df
 
     def get_total_time(self, device: str = "CUDA") -> float:
-        """computes the total device time from the profiler's events without converting to pandas df
+        """
+        Compute the total device time from the profiler's events without converting to a pandas DataFrame.
+
         Args:
-            device (str): the device to calculate the total time for (default = CUDA), options: CPU, CUDA
+            device (str): The device to calculate the total time for (default = "CUDA"). Options: "CPU", "CUDA".
         Returns:
-            float: the total device time in us
+            float: The total device time in microseconds (us).
         """
         assert device in ["CPU", "CUDA"], "device must be either CPU or CUDA"
         events = self._get_profiler_events()
@@ -107,7 +130,8 @@ class TorchProfiler(profile, Profiler):
         return total_time
 
     def get_total_flops(self) -> float:
-        """computes the total FLOPs from the profiler's events without converting to pandas df
+        """
+        Compute the total FLOPs from the profiler's events without converting to a pandas DataFrame.
 
         Returns:
             float: The sum of FLOPs for all events.
@@ -117,9 +141,11 @@ class TorchProfiler(profile, Profiler):
         return int(total_flops)
 
     def _get_profiler_events_by_record_step(self) -> Dict[str, List[FunctionEvent]]:
-        """returns the profiler events grouped by record steps
+        """
+        Return the profiler events grouped by record steps.
+
         Returns:
-            Dict[str, List[FunctionEvent]]: the profiler events grouped by record steps
+            Dict[str, List[FunctionEvent]]: Profiler events grouped by record steps.
         """
         events = self._get_profiler_events()
         matched_events = {step: [] for _, step in self.record_steps}
@@ -137,10 +163,11 @@ class TorchProfiler(profile, Profiler):
         return matched_events
 
     def get_flops_by_step(self) -> pd.DataFrame:
-        """computes the FLOPs for each step in the record_steps list based on time_range
+        """
+        Compute the FLOPs for each step in the record_steps list based on time_range.
 
         Returns:
-            pd.DataFrame: A DataFrame with the FLOPs for each step.
+            pd.DataFrame: DataFrame with the FLOPs for each step.
         """
         matched_events = self._get_profiler_events_by_record_step()
         flops_by_step = {name: sum(event.flops for event in events) for name, events in matched_events.items()}
@@ -149,9 +176,11 @@ class TorchProfiler(profile, Profiler):
         return df
 
     def get_time_by_step(self) -> pd.DataFrame:
-        """computes the time for each step in the record_steps list based on time_range
+        """
+        Compute the time for each step in the record_steps list based on time_range.
+
         Returns:
-            pd.DataFrame: A DataFrame with the time is us for each step.
+            pd.DataFrame: DataFrame with the time (in microseconds) for each step, separated by CPU and GPU.
         """
         matched_events = self._get_profiler_events_by_record_step()
         time_by_step = {}

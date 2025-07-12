@@ -2,8 +2,6 @@ from abc import abstractmethod
 from typing import Dict, List, Literal, Tuple, Union
 import numpy as np
 
-from nnt.validators.validator import PredictedBatch
-
 
 class ClassificationMetrics:
     """
@@ -35,7 +33,7 @@ class ClassificationMetrics:
         return self.__class__.__name__
 
     @abstractmethod
-    def check_classification(self, predicted_batch: PredictedBatch) -> List[Tuple[int, int]]:
+    def check_classification(self, predicted_batch) -> List[Tuple[int, int]]:
         """
         For each sample in the batch, return a list of tuples (true_label, predicted_label).
 
@@ -45,25 +43,29 @@ class ClassificationMetrics:
         Returns:
             List[Tuple[int, int]]: List of (true_label, predicted_label) pairs.
         """
+        from nnt.validators.validator import PredictedBatch
+
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def compute(self, predicted_batch: PredictedBatch):
+    def compute(self, predicted_batch) -> None:
         """
         Update the confusion matrix based on the predicted batch.
 
         Args:
             predicted_batch (PredictedBatch): Batch containing predictions and true labels.
         """
+        from nnt.validators.validator import PredictedBatch
+
         classification_results = self.check_classification(predicted_batch)
         for true_label, predicted_label in classification_results:
             self.confusion_matrix[true_label, predicted_label] += 1
 
-    def finalize(self) -> Dict[str, Union[float, np.ndarray]]:
+    def finalize(self) -> Dict[str, float]:
         """
         Finalize the metric computation and return the confusion matrix and metrics.
 
         Returns:
-            Dict[str, Union[float, np.ndarray]]: Dictionary containing accuracy, precision, recall, f1_score, and mcc.
+            Dict[str, float]: Dictionary containing accuracy, precision, recall, f1_score, and mcc.
         """
         with np.errstate(divide="ignore", invalid="ignore"):
             accuracy = np.trace(self.confusion_matrix) / np.sum(self.confusion_matrix)
@@ -98,20 +100,18 @@ class ClassificationMetrics:
 
 class OneHotClassificationMetrics(ClassificationMetrics):
     """
-    OneHotClassificationMetrics is a metrics class for evaluating classification tasks where targets are one-hot encoded.
-    This class supports both standard and sequence classification tasks. For sequence tasks, it allows specifying an offset to select the relevant token in the sequence and handles label padding. It can restrict evaluation to a subset of classes and ensures that only specified classes are considered when computing metrics.
+    Metrics class for evaluating classification tasks with one-hot encoded targets.
+    Supports both standard and sequence classification tasks, with options for class filtering and label padding.
+
     Attributes:
         sequence_offset (int): Offset for sequence classification tasks, indicating which token in the sequence to evaluate.
         classes (Union[Literal["all"], List[int]]): List of class indices to consider for evaluation. If "all", all classes are considered.
         label_padding_value (int): Padding value for labels in sequence tasks, used to ignore padded tokens.
-    Methods:
-        check_classification(predicted_batch): For each sample in the batch, returns a list of (true_label, predicted_label) tuples. Handles both standard and sequence classification, applies class filtering, and checks for unsupported shapes or invalid labels.
-        Computes classification metrics for one-hot encoded targets.
     """
 
     def __init__(
         self,
-        num_classes,
+        num_classes: int,
         logits_key: str = "logits",
         targets_key: str = "y",
         sequence_offset: int = 0,
@@ -136,14 +136,11 @@ class OneHotClassificationMetrics(ClassificationMetrics):
         self.sequence_offset = sequence_offset
         self.label_padding_value = label_padding_value
 
-    def check_classification(self, predicted_batch: PredictedBatch) -> List[Tuple[int, int]]:
+    def check_classification(self, predicted_batch) -> List[Tuple[int, int]]:
         """
         For each sample in the batch, return a list of tuples (true_label, predicted_label).
 
-        Handles both standard and sequence classification tasks.
-        The sequence classification is computed by taking the last token's label in the sequence (or the token at the sequence offset from behind)
-        and comparing it to the predicted logits maximum. When classes are specified, it ensures that the true label is within the specified classes and raises an error if not.
-        Furthermore it considers only logits in the specified classes, ignoring the rest and ensuring that the sequence offset is correctly applied ignoring padding values.
+        Handles both standard and sequence classification tasks. Applies class filtering and checks for unsupported shapes or invalid labels.
 
         Args:
             predicted_batch (PredictedBatch): Batch containing predictions and true labels.
@@ -154,6 +151,8 @@ class OneHotClassificationMetrics(ClassificationMetrics):
         Raises:
             ValueError: If logits shape is unsupported or label not in classes.
         """
+        from nnt.validators.validator import PredictedBatch
+
         logits = vars(predicted_batch.prediction).get(self.logits_key)
         labels = predicted_batch.batch.get(self.targets_key)
 

@@ -5,14 +5,28 @@ from datetime import datetime
 
 class Profiler:
     """
-    Abstract Class for Profilers
+    Abstract base class for profiling. Tracks named record steps and provides context management for profiling code sections.
+
+    Attributes:
+        record_steps (List[Tuple[datetime, str]]): List of tuples containing timestamps and step names.
     """
 
-    def __init__(self):
-        self.record_steps: List[Tuple[datetime, str]] = []
+    record_steps: List[Tuple[datetime, str]]
+
+    def __init__(self) -> None:
+        """
+        Initialize the Profiler and record the initial step.
+        """
+        self.record_steps = []
         self.record_step("__init__")
 
     def record_step(self, name: str) -> None:
+        """
+        Save a record step with a given name and current timestamp.
+
+        Args:
+            name (str): The name of the step to record.
+        """
         """
         saves a record step with a name
 
@@ -23,6 +37,12 @@ class Profiler:
 
     @contextmanager
     def record_context(self, name: str):
+        """
+        Context manager for recording profiling steps. Records a step with the given name at entry, and a step named "__other__" at exit.
+
+        Args:
+            name (str): The name of the context step.
+        """
         """
         record step as a context manager.
         Starts a record_step with the given name,

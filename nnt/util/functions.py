@@ -2,7 +2,7 @@ from datetime import datetime
 from itertools import islice
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Tuple, Iterable
 import plotly.express as px
 
 
@@ -28,7 +28,7 @@ def parse_args_string(args_string: str) -> Dict[str, Any]:
     return args
 
 
-def parse_class_initialisation_str(class_initialisation_str: str) -> Dict[str, Any]:
+def parse_class_initialisation_str(class_initialisation_str: str) -> Tuple[str, Dict[str, Any]]:
     """
     Parse a string of class initialisation arguments into a dictionary.
     Args:
@@ -41,7 +41,7 @@ def parse_class_initialisation_str(class_initialisation_str: str) -> Dict[str, A
     return class_name, parse_args_string(args_string)
 
 
-def save_json(data: dict, path: str):
+def save_json(data: dict, path: str) -> None:
     """
     Save a dictionary to a JSON file.
     Args:
@@ -74,7 +74,7 @@ def get_current_time() -> str:
     return datetime.now().strftime("%Y-%m-%d %H-%M-%S.%f")
 
 
-def iter_batchwise(iterable, n: int = 1):
+def iter_batchwise(iterable, n: int = 1) -> Iterable[Tuple[Any, ...]]:
     """
     Batch an iterable into chunks of size n.
     Args:
@@ -89,7 +89,7 @@ def iter_batchwise(iterable, n: int = 1):
         yield batch
 
 
-def get_plotly_color_scale(n: int, base_colors=px.colors.qualitative.Plotly):
+def get_plotly_color_scale(n: int, base_colors=px.colors.qualitative.Plotly) -> list:
     """
     Get a color scale for Plotly.
     Args:
@@ -100,7 +100,17 @@ def get_plotly_color_scale(n: int, base_colors=px.colors.qualitative.Plotly):
     return colors
 
 
-def flatten_dict(d, parent_key="", sep="_"):
+def flatten_dict(d: dict, parent_key: str = "", sep: str = "_") -> Dict[str, Any]:
+    """
+    Flatten a nested dictionary into a single-level dictionary with compound keys.
+
+    Args:
+        d (dict): The dictionary to flatten.
+        parent_key (str, optional): The base key to prepend to each key. Defaults to "".
+        sep (str, optional): Separator to use between parent and child keys. Defaults to "_".
+    Returns:
+        dict: A flattened dictionary with compound keys.
+    """
     items = {}
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k

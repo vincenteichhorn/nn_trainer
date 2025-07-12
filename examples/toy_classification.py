@@ -1,3 +1,5 @@
+from nnt.callbacks.energy_callback import EnergyCallback
+from nnt.callbacks.flops_budget_callback import FLOPsBudgetControllCallback
 from nnt.callbacks.logging_callback import LoggingCallback
 from nnt.callbacks.validator_callback import ValidatorCallback
 from nnt.datasets.toy_dataset import ToyClassificationDataset
@@ -52,6 +54,8 @@ if __name__ == "__main__":
                 validate_strategy="steps",
                 validate_every=500,
             ),
+            FLOPsBudgetControllCallback(output_dir=output_dir, budget=1e9, should_stop_training=False),
+            EnergyCallback(output_dir=output_dir, nvidia_query_interval=10),
         ],
     )
     trainer.train()

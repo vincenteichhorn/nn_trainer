@@ -8,15 +8,33 @@ from nnt.datasets.dataset import DataSplit, Dataset
 class ToyClassificationDataset(Dataset):
     """
     A simple dataset for toy_model.py.
-    Generates random input features and targets for regression or classification.
+    Generates random input features and one-hot targets for classification tasks.
+
+    Args:
+        num_samples (int): Number of samples in the dataset.
+        input_size (int): Size of the input features.
+        output_size (int): Number of output classes.
+
+    Example:
+        ds = ToyClassificationDataset(num_samples=100, input_size=5, output_size=3)
+        ds.load()
+        print(ds['train'][0])
     """
 
-    def __init__(self, num_samples=1000, input_size=10, output_size=2):
+    num_samples: int
+    input_size: int
+    output_size: int
+
+    def __init__(self, num_samples: int = 1000, input_size: int = 10, output_size: int = 2):
         """
+        Initialize the ToyClassificationDataset.
+
         Args:
             num_samples (int): Number of samples in the dataset.
             input_size (int): Size of the input features.
-            output_size (int): Size of the output targets.
+            output_size (int): Number of output classes.
+        Raises:
+            AssertionError: If output_size is not greater than 1.
         """
         self.num_samples = num_samples
         self.input_size = input_size
@@ -24,12 +42,12 @@ class ToyClassificationDataset(Dataset):
         assert output_size > 1, "Output size must be greater than 1 for classification."
         super().__init__()
 
-    def load(self):
+    def load(self) -> None:
         """
-        Load the dataset.
+        Load the dataset by generating random samples and assigning them to train and validation splits.
+
         Returns:
-            tuple: (inputs, targets) where inputs is a tensor of shape (num_samples, input_size)
-                   and targets is a tensor of shape (num_samples, output_size).
+            None
         """
 
         weights = np.arange(1, self.input_size + 1, dtype=np.float32)

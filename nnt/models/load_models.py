@@ -4,16 +4,22 @@ import torch
 
 
 def load_model(
-    model_name: str, tokenizer_name: str = None, device: str = None
+    model_name: str, tokenizer_name: str = None, device: str | None = None
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     """
-    Load a base model from Hugging Face's model hub.
+    Load a base model and tokenizer from Hugging Face's model hub and move the model to the appropriate device.
+
     Args:
         model_name (str): The name of the model to load.
-        tokenizer_name (str): The name of the tokenizer to load.
-        device (str): The device to load the model on (default: "cuda").
+        tokenizer_name (str, optional): The name of the tokenizer to load. If None, uses model_name.
+        device (str, optional): The device to load the model on (default: "cuda" if available, else "cpu").
     Returns:
         Tuple[AutoModelForCausalLM, AutoTokenizer]: The loaded model and tokenizer.
+
+    Example:
+        model, tokenizer = load_model("gpt2")
+        print(model)
+        print(tokenizer)
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)

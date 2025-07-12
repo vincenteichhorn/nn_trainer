@@ -6,13 +6,41 @@ import torch.nn.functional as F
 
 
 class ToyClassificationModel(nn.Module):
-    def __init__(self, input_size=10, hidden_size=20, output_size=2):
+    """
+    Simple feedforward neural network for classification tasks.
+
+    Args:
+        input_size (int): Number of input features.
+        hidden_size (int): Number of hidden units.
+        output_size (int): Number of output classes.
+
+    Example:
+        model = ToyClassificationModel(input_size=10, hidden_size=20, output_size=2)
+        x = torch.randn(5, 10)
+        y = torch.randint(0, 2, (5,))
+        out = model(x, y)
+        print(out.loss, out.logits)
+    """
+
+    def __init__(self, input_size: int = 10, hidden_size: int = 20, output_size: int = 2):
+        """
+        Initialize the ToyClassificationModel.
+        """
         super(ToyClassificationModel, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, output_size)
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def forward(self, x, y=None):
+    def forward(self, x: torch.Tensor, y: torch.Tensor = None) -> SimpleNamespace:
+        """
+        Forward pass for the classification model.
+
+        Args:
+            x (Tensor): Input features.
+            y (Tensor, optional): Target labels.
+        Returns:
+            SimpleNamespace: Contains 'loss' and 'logits'.
+        """
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         loss = self.loss_fn(x, y) if y is not None else None
@@ -20,7 +48,38 @@ class ToyClassificationModel(nn.Module):
 
 
 class ToyLanguageModel(nn.Module):
-    def __init__(self, vocab_size=100, embed_dim=32, num_heads=2, num_layers=2, hidden_dim=64, max_seq_len=128):
+    """
+    Simple transformer-based language model for sequence modeling and generation.
+
+    Args:
+        vocab_size (int): Vocabulary size.
+        embed_dim (int): Embedding dimension.
+        num_heads (int): Number of attention heads.
+        num_layers (int): Number of transformer blocks.
+        hidden_dim (int): Hidden dimension in transformer blocks.
+        max_seq_len (int): Maximum sequence length.
+
+    Example:
+        model = ToyLanguageModel(vocab_size=100)
+        input_ids = torch.randint(0, 100, (2, 10))
+        out = model(input_ids)
+        print(out.logits.shape)
+        generated = model.generate(input_ids, max_length=5)
+        print(generated)
+    """
+
+    def __init__(
+        self,
+        vocab_size: int = 100,
+        embed_dim: int = 32,
+        num_heads: int = 2,
+        num_layers: int = 2,
+        hidden_dim: int = 64,
+        max_seq_len: int = 128,
+    ):
+        """
+        Initialize the ToyLanguageModel.
+        """
         super(ToyLanguageModel, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(max_seq_len, embed_dim)
@@ -30,7 +89,22 @@ class ToyLanguageModel(nn.Module):
         self.fc = nn.Linear(embed_dim, vocab_size)
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
-    def forward(self, input_ids, labels=None, attention_mask=None):
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+    ) -> SimpleNamespace:
+        """
+        Forward pass for the language model.
+
+        Args:
+            input_ids (Tensor): Input token IDs.
+            labels (Tensor, optional): Target token IDs for loss computation.
+            attention_mask (Tensor, optional): Attention mask for padding.
+        Returns:
+            SimpleNamespace: Contains 'loss' and 'logits'.
+        """
         seq_len = input_ids.size(1)
         positions = torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand_as(input_ids)
         safe_input_ids = input_ids.clamp(0, self.embedding.num_embeddings - 1)
@@ -53,7 +127,24 @@ class ToyLanguageModel(nn.Module):
             loss = None
         return SimpleNamespace(loss=loss, logits=logits)
 
-    def generate(self, input_ids, max_length=20, temperature=1.0, eot_token_id=None):
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        max_length: int = 20,
+        temperature: float = 1.0,
+        eot_token_id: int = None,
+    ) -> torch.Tensor:
+        """
+        Generate sequences from input_ids using autoregressive sampling.
+
+        Args:
+            input_ids (Tensor): Initial input token IDs.
+            max_length (int): Maximum length of generated sequence.
+            temperature (float): Sampling temperature.
+            eot_token_id (int, optional): End-of-text token ID to stop generation.
+        Returns:
+            Tensor: Generated token IDs.
+        """
         self.eval()
         generated = input_ids
         for _ in range(max_length):
@@ -69,14 +160,35 @@ class ToyLanguageModel(nn.Module):
 
 
 class ToyTransformerBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, hidden_dim):
+    """
+    Transformer block with multi-head self-attention and feedforward layers.
+
+    Args:
+        embed_dim (int): Embedding dimension.
+        num_heads (int): Number of attention heads.
+        hidden_dim (int): Hidden dimension in feedforward layers.
+    """
+
+    def __init__(self, embed_dim: int, num_heads: int, hidden_dim: int):
+        """
+        Initialize the ToyTransformerBlock.
+        """
         super().__init__()
         self.attn = ToyMultiHeadSelfAttention(embed_dim, num_heads)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.ff = nn.Sequential(nn.Linear(embed_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, embed_dim))
         self.norm2 = nn.LayerNorm(embed_dim)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
+        """
+        Forward pass for the transformer block.
+
+        Args:
+            x (Tensor): Input tensor.
+            attn_mask (Tensor, optional): Attention mask.
+        Returns:
+            Tensor: Output tensor after attention and feedforward layers.
+        """
         attn_out = self.attn(x, attn_mask)
         x = self.norm1(x + attn_out)
         ff_out = self.ff(x)
@@ -85,7 +197,18 @@ class ToyTransformerBlock(nn.Module):
 
 
 class ToyMultiHeadSelfAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads):
+    """
+    Multi-head self-attention layer for transformer blocks.
+
+    Args:
+        embed_dim (int): Embedding dimension.
+        num_heads (int): Number of attention heads.
+    """
+
+    def __init__(self, embed_dim: int, num_heads: int):
+        """
+        Initialize the ToyMultiHeadSelfAttention layer.
+        """
         super().__init__()
         assert embed_dim % num_heads == 0
         self.num_heads = num_heads
@@ -96,7 +219,16 @@ class ToyMultiHeadSelfAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
+        """
+        Forward pass for multi-head self-attention.
+
+        Args:
+            x (Tensor): Input tensor of shape (batch, seq_len, embed_dim).
+            attn_mask (Tensor, optional): Attention mask.
+        Returns:
+            Tensor: Output tensor after attention.
+        """
         batch_size, seq_len, embed_dim = x.size()
         q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)

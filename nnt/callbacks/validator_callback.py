@@ -1,28 +1,60 @@
 import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from nnt.callbacks.trainer_callback import TrainerCallback
 from nnt.util.fast_csv import FastCSV
 from nnt.util.functions import flatten_dict
 from nnt.util.monitor import Monitor
 from nnt.validators.validator import Validator
 
+if TYPE_CHECKING:
+    from nnt.trainer import Trainer
+
 
 class ValidatorCallback(TrainerCallback):
     """
-    Callback for validation during training.
+    Callback for performing validation during training using a Validator.
+    Computes metrics on the validation dataset at specified intervals and logs results to a CSV file.
 
-    This callback is used to perform validation at the end of each epoch or at specified intervals.
-    It utilizes the Validator class to compute metrics on the validation dataset.
+    Args:
+        output_dir (str): Directory to save validation logs.
+        validator (Validator): Validator instance for computing metrics.
+        log_file (str): Name of the log file.
+        validate_strategy (Literal["epochs", "steps"]): Validation interval strategy.
+        validate_every (int): Validation interval.
+
+    Example:
+        callback = ValidatorCallback(output_dir="./logs", validator=my_validator)
+        trainer = Trainer(..., callbacks=[callback])
+        trainer.train()
     """
+
+    output_dir: str
+    validation_log_file: str
+    validation_strategy: str
+    validation_interval: int
+    validator: Validator
+    fast_csv_writer: FastCSV
+    writer_has_set_columns: bool
+    skip_info_keys: list
 
     def __init__(
         self,
         output_dir: str,
         validator: Validator,
         log_file: str = "validation_log.csv",
-        validate_strategy: Literal["epochs", "steps"] = "epoch",
+        validate_strategy: str = "epoch",
         validate_every: int = 1,
-    ):
+    ) -> None:
+        """
+        Initialize the ValidatorCallback and set up logging and validation strategy.
+
+        Args:
+            output_dir (str): Directory to save validation logs.
+            validator (Validator): Validator instance for computing metrics.
+            log_file (str): Name of the log file.
+            validate_strategy (Literal["epochs", "steps"]): Validation interval strategy.
+            validate_every (int): Validation interval.
+        """
         self.output_dir = output_dir
         self.validation_log_file = os.path.join(output_dir, log_file)
         self.validation_strategy = validate_strategy
@@ -35,7 +67,14 @@ class ValidatorCallback(TrainerCallback):
         self.writer_has_set_columns = False
         self.skip_info_keys = ["current_batch"]
 
-    def on_step_begin(self, info, trainer):
+    def on_step_begin(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Perform validation and log results at the beginning of a step if the interval is met.
+
+        Args:
+            info (dict): Training info for the step.
+            trainer (Trainer): Trainer instance.
+        """
         train_set_size = len(trainer.train_data)
         self.validate_every = (
             self.validation_interval if self.validation_strategy == "steps" else (train_set_size * self.validation_interval)

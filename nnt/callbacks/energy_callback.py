@@ -11,8 +11,30 @@ if TYPE_CHECKING:
 
 
 class EnergyCallback(TrainerCallback):
+    """
+    Callback for tracking and logging GPU energy consumption during training using NvidiaProfiler.
+    Records energy usage at key training steps and saves results to a CSV file if nvidia-smi is available.
 
-    def __init__(self, output_dir, nvidia_query_interval: int = 10):
+    Args:
+        output_dir (str): Directory to save energy logs.
+        nvidia_query_interval (int): Interval in milliseconds for querying nvidia-smi.
+
+    Example:
+        callback = EnergyCallback(output_dir="./logs", nvidia_query_interval=10)
+        trainer = Trainer(..., callbacks=[callback])
+        trainer.train()
+    """
+
+    prof: NvidiaProfiler | None
+
+    def __init__(self, output_dir: str, nvidia_query_interval: int = 10):
+        """
+        Initialize the EnergyCallback and start NvidiaProfiler if available.
+
+        Args:
+            output_dir (str): Directory to save energy logs.
+            nvidia_query_interval (int): Interval in milliseconds for querying nvidia-smi.
+        """
         energy_log = os.path.join(output_dir, "energy_log.csv")
         # check if nvidia-smi is available by calling it
         self.prof = None
@@ -29,41 +51,93 @@ class EnergyCallback(TrainerCallback):
             )
 
     def __del__(self):
+        """
+        Destructor to stop the profiler when the callback is deleted.
+        """
         if self.prof is None:
             return
         self.prof.stop()
 
-    def on_step_begin(self, info: dict, trainer: "Trainer"):
+    def on_step_begin(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the beginning of a training step.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("step_begin")
 
-    def on_step_end(self, info: dict, trainer: "Trainer"):
+    def on_step_end(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the end of a training step.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("step_end")
 
-    def on_epoch_begin(self, info: dict, trainer: "Trainer"):
+    def on_epoch_begin(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the beginning of an epoch.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("epoch_begin")
 
-    def on_epoch_end(self, info: dict, trainer: "Trainer"):
+    def on_epoch_end(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the end of an epoch.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("epoch_end")
 
-    def on_training_begin(self, info: dict, trainer: "Trainer"):
+    def on_training_begin(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the beginning of training.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("training_begin")
 
-    def on_training_end(self, info: dict, trainer: "Trainer"):
+    def on_training_end(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at the end of training.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("training_end")
 
-    def on_checkpoint(self, info, trainer: "Trainer"):
+    def on_checkpoint(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Record energy usage at checkpoint events.
+
+        Args:
+            info (dict): Training info.
+            trainer (Trainer): Trainer instance.
+        """
         if self.prof is None:
             return
         self.prof.record_step("checkpoint")

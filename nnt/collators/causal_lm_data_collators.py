@@ -1,28 +1,57 @@
 import torch
+from typing import Any, List, Dict
+from transformers import PreTrainedTokenizer
 
 
 class DataCollatorForCausalLM:
-    def __init__(self, tokenizer):
+    """
+    Collator for batching and padding samples for causal language modeling tasks.
+    Handles input_ids, attention_mask, and labels, with support for left/right padding and padding to multiples.
+
+    Args:
+        tokenizer: Tokenizer object with pad_token_id.
+
+    Example:
+        collator = DataCollatorForCausalLM(tokenizer)
+        batch = collator([
+            {'input_ids': [1,2,3], 'labels': [1,2,3]},
+            {'input_ids': [4,5], 'labels': [4,5]}
+        ])
+        print(batch['input_ids'].shape)  # torch.Size([2, padded_length])
+    """
+
+    tokenizer: PreTrainedTokenizer
+    padding_token: int
+    loss_mask_token: int
+
+    def __init__(self, tokenizer: PreTrainedTokenizer):
+        """
+        Initialize the DataCollatorForCausalLM with a tokenizer.
+
+        Args:
+            tokenizer: Tokenizer object with pad_token_id.
+        """
         self.tokenizer = tokenizer
         self.padding_token = tokenizer.pad_token_id
         self.loss_mask_token = -100
 
     def _stack_and_pad(
         self,
-        tensors,
+        tensors: list,
         padding_side: str = "right",
         pad_token: int = None,
         pad_to_multiple_of: int = 16,
-    ):
+    ) -> torch.Tensor:
         """
         Stack and pad tensors to the same length, optionally padding to a multiple of a given value.
+
         Args:
-            tensors (list): list of tensors to stack and pad (N)
-            padding_side (str): "right" or "left"
-            pad_token (int): padding token id
-            pad_to_multiple_of (int): pad the sequence length to a multiple of this value
+            tensors (list): List of tensors to stack and pad (N).
+            padding_side (str): "right" or "left".
+            pad_token (int): Padding token id.
+            pad_to_multiple_of (int): Pad the sequence length to a multiple of this value.
         Returns:
-            torch.Tensor: stacked and padded tensor of shape (N, max_length)
+            torch.Tensor: Stacked and padded tensor of shape (N, max_length).
         """
         if pad_token is None:
             pad_token = self.padding_token
@@ -39,24 +68,26 @@ class DataCollatorForCausalLM:
 
         return torch.stack(padded_tensors, dim=0)
 
-    def _feature_to_tensor(self, feature):
+    def _feature_to_tensor(self, feature) -> torch.Tensor:
         """
-        convert a feature (input_ids, attention_mask) to a tensor if it is not already a tensor
+        Convert a feature (input_ids, attention_mask) to a tensor if it is not already a tensor.
+
         Args:
-            feature (Union[list, torch.Tensor]): the feature to convert
+            feature (Union[list, torch.Tensor]): The feature to convert.
         Returns:
-            torch.Tensor: the converted feature
+            torch.Tensor: The converted feature.
         """
         return torch.tensor(feature) if not isinstance(feature, torch.Tensor) else feature
 
-    def __call__(self, samples, padding_side: str = "left"):
+    def __call__(self, samples: List[Dict[str, Any]], padding_side: str = "left") -> Dict[str, torch.Tensor]:
         """
-        Callable function to stack and pad features to max length of a batch
+        Collate, stack, and pad a list of samples into a batch dictionary for causal LM training.
+
         Args:
-            features (list): list of features to stack and pad
-            padding_side (str): "right" or "left"
+            samples (list): List of sample dictionaries.
+            padding_side (str): "right" or "left".
         Returns:
-            dict: dictionary of stacked and padded features (input_ids, attention_mask, labels)
+            dict: Dictionary of stacked and padded features (input_ids, attention_mask, labels).
         """
         input_ids = [self._feature_to_tensor(sample["input_ids"]) for sample in samples]
         labels = [

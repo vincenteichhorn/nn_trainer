@@ -102,7 +102,7 @@ def test_causallmdataset_build_chat_not_implemented():
         pass
 
     with pytest.raises(NotImplementedError):
-        DummyDataset.build_chat({"foo": "bar"})
+        DummyDataset.build_chat({"foo": "bar"}, "train")
 
 
 class DummyAlpacaDataset(CausalLMDataset):
