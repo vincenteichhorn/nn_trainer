@@ -16,7 +16,7 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 
 2. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/nn_trainer.git
+   git clone https://github.com/vincenteichhorn/nn_trainer.git
    cd nn_trainer
    ```
 
@@ -109,14 +109,14 @@ You can find practical usage and advanced scenarios in the [`examples/`](example
 Activate your Poetry environment and run an example script:
 
 ```bash
-poetry shell
+source $(poetry env info --path)/bin/activate
 python examples/toy_language_model.py
 ```
 
 or
 
 ```bash
-poetry shell
+source $(poetry env info --path)/bin/activate
 python examples/toy_classification.py
 ```
 
@@ -145,7 +145,8 @@ Explore the folder for more scripts demonstrating various features of NN Trainer
 ## References
 
 - [Meta-Llama-3-2-1b](https://huggingface.co/meta-llama/Meta-Llama-3-2-1b)
-- [FLAN-T5 Instruction Data](https://huggingface.co/datasets/flan/2021_t5_instruction)
+- [FLAN-T5 Instruction Data](https://huggingface.co/datasets/SirNeural/flan_v2)
 - [PyTorch](https://pytorch.org/)
 - [Transformers](https://huggingface.co/docs/transformers/index)
 - [Datasets](https://huggingface.co/docs/datasets/index)
+- [Evaluation Metrics](https://huggingface.co/docs/evaluate/index)
