@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Dict, List, Literal, Tuple, Union
 import numpy as np
+import torch
 
 
 class ClassificationMetrics:
@@ -43,7 +44,6 @@ class ClassificationMetrics:
         Returns:
             List[Tuple[int, int]]: List of (true_label, predicted_label) pairs.
         """
-        from nnt.validators.validator import PredictedBatch
 
         raise NotImplementedError("Subclasses must implement this method.")
 
@@ -54,7 +54,6 @@ class ClassificationMetrics:
         Args:
             predicted_batch (PredictedBatch): Batch containing predictions and true labels.
         """
-        from nnt.validators.validator import PredictedBatch
 
         classification_results = self.check_classification(predicted_batch)
         for true_label, predicted_label in classification_results:
@@ -89,6 +88,7 @@ class ClassificationMetrics:
                 numerator = (tp * tn) - (fp * fn)
                 denominator = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
                 mcc = numerator / denominator if denominator != 0 else 0.0
+            self.confusion_matrix = np.zeros_like(self.confusion_matrix)
             return {
                 "accuracy": float(accuracy),
                 "precision": float(precision),
@@ -151,31 +151,32 @@ class OneHotClassificationMetrics(ClassificationMetrics):
         Raises:
             ValueError: If logits shape is unsupported or label not in classes.
         """
-        from nnt.validators.validator import PredictedBatch
 
         logits = vars(predicted_batch.prediction).get(self.logits_key)
         labels = predicted_batch.batch.get(self.targets_key)
 
         if logits.ndim == 2:
-            predicted_labels = np.argmax(logits, axis=1)
-            true_labels = np.argmax(labels, axis=1)
+            predicted_labels = torch.argmax(logits, dim=1)
+            true_labels = torch.argmax(labels, dim=1)
+            output = [(int(t.item()), int(p.item())) for t, p in zip(true_labels, predicted_labels)]
         elif logits.ndim == 3:
-            logits = logits[:, self.sequence_offset :, self.classes]
-            logits = logits.reshape(-1, len(self.classes))
-            predicted_labels = np.argmax(logits, axis=1)
+            predicted_labels, true_labels = [], []
+            logits = logits[:, :, self.classes]
 
-            true_labels = []
-            for sequence in labels:
-                sequence = sequence[sequence != self.label_padding_value]
-                label = sequence[len(sequence) - self.sequence_offset - 1]
-                if not np.isin(label, self.classes):
+            for pad_logits_sequence, pad_label_sequence in zip(logits, labels):
+                label_sequence = pad_label_sequence[pad_label_sequence != self.label_padding_value]
+                true_label = label_sequence[len(label_sequence) - self.sequence_offset - 1].cpu()
+                if not torch.isin(true_label, torch.tensor(self.classes)):
                     raise ValueError(
-                        f"Label {label} not in classes {self.classes}. Ensure that the sequence offset is correct."
+                        f"Label {true_label.item()} not in classes {self.classes}. Ensure that the sequence offset is correct."
                     )
-                true_labels.append(self.classes.index(label))
-            true_labels = np.array(true_labels)
+                true_labels.append(self.classes.index(int(true_label.item())))
 
+                logits_sequence = pad_logits_sequence[pad_label_sequence != self.label_padding_value, :]
+                predicted_label = logits_sequence[len(logits_sequence) - self.sequence_offset - 2]
+                predicted_labels.append(int(torch.argmax(predicted_label).item()))
+            output = [(int(t), int(p)) for t, p in zip(true_labels, predicted_labels)]
         else:
             raise ValueError(f"Unsupported logits shape: {logits.shape}")
 
-        return [(int(t), int(p)) for t, p in zip(true_labels, predicted_labels)]
+        return output

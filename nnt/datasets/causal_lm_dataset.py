@@ -141,7 +141,7 @@ class CausalLMDataset(Dataset):
     loss_mask_token: int
     verbose: bool
 
-    def __init__(self, assisten_labels_only: bool = True, verbose: bool = False, *args, **kwargs):
+    def __init__(self, assisten_labels_only: bool = True, verbose: bool = True, *args, **kwargs):
         """
         Initialize the CausalLMDataset.
         """

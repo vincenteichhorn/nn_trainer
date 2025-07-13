@@ -67,6 +67,20 @@ class ValidatorCallback(TrainerCallback):
         self.writer_has_set_columns = False
         self.skip_info_keys = ["current_batch"]
 
+    def validate(self, info: dict, trainer: "Trainer") -> None:
+        global_step = info["global_step"]
+        results = self.validator.validate()
+        row = {
+            **{k: v for k, v in info.items() if k not in self.skip_info_keys},
+            **flatten_dict(results),
+        }
+        if not self.writer_has_set_columns:
+            self.fast_csv_writer.set_columns(row.keys())
+            self.writer_has_set_columns = True
+        Monitor().print(f"Validation results at step {global_step}: {' '.join(f'{k}: {v}' for k, v in row.items())}")
+
+        self.fast_csv_writer.append(row)
+
     def on_step_begin(self, info: dict, trainer: "Trainer") -> None:
         """
         Perform validation and log results at the beginning of a step if the interval is met.
@@ -75,20 +89,20 @@ class ValidatorCallback(TrainerCallback):
             info (dict): Training info for the step.
             trainer (Trainer): Trainer instance.
         """
-        train_set_size = len(trainer.train_data)
+        train_set_size = len(trainer.train_data) // trainer.training_args.batch_size
         self.validate_every = (
             self.validation_interval if self.validation_strategy == "steps" else (train_set_size * self.validation_interval)
         )
         global_step = info["global_step"]
-        if global_step % self.validate_every == 0:
-            results = self.validator.validate()
-            row = {
-                **{k: v for k, v in info.items() if k not in self.skip_info_keys},
-                **flatten_dict(results),
-            }
-            if not self.writer_has_set_columns:
-                self.fast_csv_writer.set_columns(row.keys())
-                self.writer_has_set_columns = True
-            Monitor().print(f"Validation results at step {global_step}: {' '.join(f'{k}: {v}' for k, v in row.items())}")
+        if (
+            global_step % self.validate_every == 0
+            and global_step != 0
+            and global_step != train_set_size * trainer.training_args.num_epochs
+        ):
+            self.validate(info, trainer)
 
-            self.fast_csv_writer.append(row)
+    def on_training_end(self, info, trainer):
+        self.validate(info, trainer)
+
+    def on_training_begin(self, info, trainer):
+        self.validate(info, trainer)

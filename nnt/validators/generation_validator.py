@@ -60,6 +60,8 @@ class GenerationValidator(Validator):
                 input_ids=batch["input_ids"],
                 max_length=self.max_length,
                 temperature=self.temperature,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
             )
         new_token_ids = generated[:, input_seq_len:]
         generated_text = self.tokenizer.batch_decode(new_token_ids, skip_special_tokens=True)

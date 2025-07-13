@@ -61,12 +61,12 @@ def get_dataset(name: str, *args, **kwargs) -> CausalLMDataset:
         return PIQADataset(*args, **kwargs)
     elif name == "hellaswag":
         return HellaSwagDataset(*args, **kwargs)
-    elif name.startswith("alanai_"):
-        name = name.split("alanai_")[1]
-        return AlanAIDataset(name, *args, **kwargs)
+    elif name.startswith("allanai_"):
+        name = name.split("allanai_")[1]
+        return AllanAIDataset(name, *args, **kwargs)
     else:
         raise ValueError(
-            f"Dataset {name} not found. Available datasets: alpaca, alpaca_small, glue_<task_name>, arc_<subset>, piqa, hellaswag, alanai_<name>."
+            f"Dataset {name} not found. Available datasets: alpaca, alpaca_small, glue_<task_name>, arc_<subset>, piqa, hellaswag, allanai_<name>."
         )
 
 
@@ -178,7 +178,7 @@ class GlueDatasets(CausalLMDataset):
             **kwargs: Additional keyword arguments.
         """
         self.task_name = task_name
-        self.train_set_size = train_set_size
+        self.train_set_size = 16  # train_set_size
         super().__init__(*args, **kwargs)
         assert task_name in self.available_tasks(), f"Task {task_name} not available."
 
@@ -246,7 +246,7 @@ class GlueDatasets(CausalLMDataset):
             ds["train"] = train_ds["train"]
         self.train_set_size = self.train_set_size or len(ds["train"])
         self["train"] = DataSplit.from_iterable(ds["train"].select(range(self.train_set_size)))
-        self["validation"] = DataSplit.from_iterable(ds["validation"])
+        self["validation"] = DataSplit.from_iterable(ds["validation"].select(range(16)))
 
     def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
         """
@@ -565,7 +565,7 @@ class HellaSwagDataset(CausalLMDataset):
         return list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
-class AlanAIDataset(CausalLMDataset):
+class AllanAIDataset(CausalLMDataset):
     """
     Dataset class for AllenAI Natural Instructions datasets.
     """
@@ -575,7 +575,7 @@ class AlanAIDataset(CausalLMDataset):
 
     def __init__(self, name: str, seed: int = 42, *args, **kwargs) -> None:
         """
-        Initialize the AlanAIDataset.
+        Initialize the AllanAIDataset.
 
         Args:
             name (str): Name of the dataset.
@@ -612,7 +612,7 @@ class AlanAIDataset(CausalLMDataset):
         self["validation"] = DataSplit.from_pandas(validation_data)
         self["generation"] = DataSplit.from_pandas(validation_data)
 
-    def build_chat(self, example: Dict[str, Any], split: str = "") -> LMConversation:
+    def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
         """
         Build a chat from an AlanAI example.
 
@@ -624,7 +624,7 @@ class AlanAIDataset(CausalLMDataset):
             LMConversation: The chat built from the example.
         """
         conversation = LMConversation().add_turn("user", example["input"])
-        if split in ["train", "validation"]:
+        if split_name in ["train", "validation"]:
             conversation.add_turn("assistant", example["output"])
         return conversation
 

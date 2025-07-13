@@ -22,6 +22,7 @@ class StochasticLoRACallback(TrainerCallback):
         num_total_layers: int,
         random_seed: int = 42,
         savings: float = 0.5,
+        concentration: float = 5,
     ):
         """
         Args:
@@ -32,7 +33,7 @@ class StochasticLoRACallback(TrainerCallback):
         """
         self.savings = savings
         assert 0 < savings < 1, "savings must be in (0, 1)"
-        self.k = 5
+        self.k = concentration
         self.alpha = self.savings * self.k
         self.beta = (1 - self.savings) * self.k
         self.num_total_layers = num_total_layers
@@ -60,7 +61,7 @@ class StochasticLoRACallback(TrainerCallback):
                     module.B.requires_grad_(True)
 
 
-class AdaptiveLORACallback(TrainerCallback):
+class AdaptiveLoRACallback(TrainerCallback):
     """
     Callback for adaptively selecting trainable LoRA layers based on their importance.
     Supports stochastic and deterministic selection approaches.

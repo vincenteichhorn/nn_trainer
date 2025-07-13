@@ -7,6 +7,7 @@ from ftt.approaches.lora import LoRAExperiment, LoRAExperimentConfig
 from ftt.datasets import get_dataset
 from ftt.lora import LoRAModel, load_model
 from ftt.lora_strategies import LoRAPartialStrategy, LoRAUniformStrategy
+from ftt.model_impact_callbacks import StochasticLoRACallback
 from nnt.callbacks.energy_callback import EnergyCallback
 from nnt.callbacks.flops_budget_callback import FLOPsBudgetControllCallback
 from nnt.callbacks.logging_callback import LoggingCallback
@@ -22,16 +23,17 @@ from nnt.validators.generation_validator import GenerationValidator
 from nnt.validators.validator import ValidationArguments
 
 
-class StaticApproachConfig(LoRAExperimentConfig):
+class StochasticApproachConfig(LoRAExperimentConfig):
     """
-    Configuration for the static approach experiment.
-    This class extends LoRAExperimentConfig to include parameters specific to static approaches.
+    Configuration for the stochastic approach experiment.
+    This class extends LoRAExperimentConfig to include parameters specific to stochastic approaches.
     """
 
-    num_top_layers: int = 1
+    savings: float = 0.5
+    concentration: float = 5
 
 
-class StaticApproach(LoRAExperiment):
+class StochasticApproach(LoRAExperiment):
     """
     Static approach experiment that uses LoRA with a static model.
     This class extends LoRAExperiment to implement the static approach.
@@ -47,32 +49,32 @@ class StaticApproach(LoRAExperiment):
         Returns:
             str: The output directory path for the specified repetition.
         """
-        return f"{super().get_repetition_output_dir(repid)}-nlayer-{self.config.num_top_layers}"
+        return f"{super().get_repetition_output_dir(repid)}-savings-{self.config.savings}-concentration-{self.config.concentration}"
 
-    def load_model_and_tokenizer(self):
-        base_model, tokenizer = load_model(self.config.base_model_name, self.config.tokenizer_name)
-        layer_parse_rule = lambda name: (int(name.split(".")[2]) if len(name.split(".")) > 2 else 0)  # noqa: E731
-        num_total_layers = max(layer_parse_rule(name) for name, _ in base_model.named_modules()) + 1
-        model = LoRAModel(
-            base_model,
-            LoRAPartialStrategy(
-                rank=self.config.lora_rank,
-                dropout=self.config.lora_dropout,
-                alpha=self.config.lora_alpha,
-                num_total_layers=num_total_layers,
-                num_layers=self.config.num_top_layers,
-                begin_from="top",
+    def load_additional_callbacks(self, *args, **kwargs) -> List[TrainerCallback]:
+        """
+        Load additional callbacks specific to the stochastic approach.
+
+        Returns:
+            List[TrainerCallback]: A list of additional callbacks.
+        """
+        layer_parse_rule = lambda name: (int(name.split(".")[3]) if len(name.split(".")) > 3 else 0)  # noqa: E731
+        num_total_layers = max(layer_parse_rule(name) for name, _ in self.model.named_modules()) + 1
+        rep_id = kwargs["rep_id"] if "rep_id" in kwargs else 0
+        return [
+            StochasticLoRACallback(
                 layer_id_parse_rule=layer_parse_rule,
-            ),
-            self.config.base_model_name,
-        )
-        return model, tokenizer
+                num_total_layers=num_total_layers,
+                savings=self.config.savings,
+                random_seed=rep_id * int(100 * self.config.savings) + 42,
+            )
+        ]
 
 
 if __name__ == "__main__":
 
-    config = experiment_config_cli(StaticApproachConfig, verbose=True)
-    experiment = StaticApproach(config)
+    config = experiment_config_cli(StochasticApproachConfig, verbose=True)
+    experiment = StochasticApproach(config)
     experiment.run()
     print("Experiment completed successfully.")
     os.kill(os.getpid(), signal.SIGKILL)

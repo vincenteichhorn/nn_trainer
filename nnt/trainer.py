@@ -74,6 +74,7 @@ class Trainer:
         self.train_data = train_data
         self.callbacks = callbacks
         self.device = model.device if hasattr(model, "device") else ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
         self.optimizer = optimizer or torch.optim.AdamW(
             self.model.parameters(),
             lr=self.training_args.learning_rate,
@@ -200,8 +201,8 @@ class Trainer:
             for epoch_id in range(self.training_args.num_epochs):
                 self.epoch_seed = epoch_id
                 self._call_callbacks("on_epoch_begin", _get_info())
-                for i, batch in Monitor().tqdm(
-                    enumerate(self.train_batches),
+                for batch in Monitor().tqdm(
+                    self.train_batches,
                     desc=f"Batches (Epoch {epoch_id + 1}/{self.training_args.num_epochs})",
                     total=len(self.train_batches),
                 ):
@@ -209,9 +210,9 @@ class Trainer:
                         self._call_callbacks("on_training_end", _get_info())
                         self._save_model(global_step)
                         return self.model
+                    batch = self._batch_to_device(batch)
                     current_batch = batch
                     self._call_callbacks("on_step_begin", _get_info())
-                    batch = self._batch_to_device(batch)
                     self.model.zero_grad()
                     outputs = self.model(**batch)
                     loss = outputs.loss

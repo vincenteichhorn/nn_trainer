@@ -41,7 +41,7 @@ class Experiment:
         raise NotImplementedError("Subclasses must implement this method.")
 
 
-def experiment_config_cli(config_class: Type):
+def experiment_config_cli(config_class: Type, verbose: bool = True) -> ExperimentConfig:
     def get_all_attrs(cls_type, prefix=""):
         attrs = {}
         seen = set()
@@ -77,6 +77,10 @@ def experiment_config_cli(config_class: Type):
     parser = argparse.ArgumentParser(description=getattr(config_class, "description", ""))
     add_arguments(parser, all_attrs)
     args = parser.parse_args()
+    if verbose:
+        print("Parsed arguments:")
+        for key, value in vars(args).items():
+            print(f"{key}: {value}")
     flat_config_dict = vars(args)
 
     def build_instance(cls_type, prefix=""):
@@ -91,6 +95,12 @@ def experiment_config_cli(config_class: Type):
                 setattr(instance, attr, nested_instance)
             else:
                 val = flat_config_dict.get(full_key_prefix, getattr(cls_type, attr, None))
+                # Cast the value to the correct type if possible
+                if val is not None and typ in [int, float, str, bool]:
+                    try:
+                        val = typ(val)
+                    except Exception:
+                        pass
                 setattr(instance, attr, val)
         return instance
 

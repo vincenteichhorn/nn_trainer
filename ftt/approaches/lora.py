@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import os
 from typing import List, Literal, Tuple
+import torch
 from transformers import PreTrainedTokenizer
 from torch.nn import Module
 from ftt.datasets import get_dataset
@@ -40,7 +41,11 @@ class LoRAExperimentConfig(RepetitiveExperimentConfig):
     lora_dropout: float = 0.1
     dataset_name: str = "glue_mrpc"
     dataset_validation: Literal["forward", "generation", ""] = ""
+    validate_strategy: Literal["steps", "epochs"] = "epochs"
+    validate_every: int = 1
+    validation_batch_size: int = 16
     generation_reference_column: str = "output"
+    generation_max_length: int = 128
 
 
 class LoRAExperiment(Experiment):
@@ -62,7 +67,7 @@ class LoRAExperiment(Experiment):
         if self.config.training_args.model_save_function is None:
             self.config.training_args.model_save_function = lambda model, path: model.save_pretrained(path)
 
-    def load_additional_callbacks(self) -> List[TrainerCallback]:
+    def load_additional_callbacks(self, *args, **kwargs) -> List[TrainerCallback]:
         """
         Load additional callbacks if needed.
         This method can be overridden by subclasses to add specific callbacks.
@@ -83,31 +88,44 @@ class LoRAExperiment(Experiment):
         )
         return model, tokenizer
 
+    def get_repetition_output_dir(self, repid: int) -> str:
+        """
+        Get the output directory for a specific repetition.
+
+        Args:
+            repid (int): Repetition ID.
+        Returns:
+            str: Output directory path for the repetition.
+        """
+        return os.path.join(self.config.output_dir, self.config.dataset_name, str(repid))
+
     def run(self):
         """
         Run the static approach using the provided configuration.
         This method should be implemented by subclasses.
         """
-
         for repid in range(self.config.num_repetitions):
-            output_dir = f"{self.config.output_dir}/{self.config.dataset_name}/{repid}"
+            model, tokenizer = self.load_model_and_tokenizer()
+            output_dir = self.get_repetition_output_dir(repid)
             done_file = f"{output_dir}/donefile"
             if self.config.watch_done_file and os.path.exists(done_file):
                 print(f"Skipping repetition {repid} as done file exists: {done_file}")
                 continue
+            print(f"Running repetition {repid} with output directory: {output_dir}")
 
             validator = None
+            validation_arguments = ValidationArguments(
+                batch_size=self.config.validation_batch_size, data_collator=DataCollatorForCausalLM(tokenizer)
+            )
             if self.config.dataset_validation == "forward":
                 validator = ForwardValidator(
-                    model=self.model,
-                    validation_args=ValidationArguments(
-                        batch_size=32, data_collator=DataCollatorForCausalLM(self.tokenizer)
-                    ),
+                    model=model,
+                    validation_args=validation_arguments,
                     validation_data=self.dataset["validation"],
                     metrics=[
                         OneHotClassificationMetrics(
                             num_classes=len(self.dataset.get_task_classes()),
-                            classes=self.tokenizer.convert_tokens_to_ids(self.dataset.get_task_classes()),
+                            classes=tokenizer.convert_tokens_to_ids(self.dataset.get_task_classes()),
                             targets_key="labels",
                             logits_key="logits",
                         )
@@ -115,12 +133,11 @@ class LoRAExperiment(Experiment):
                 )
             elif self.config.dataset_validation == "generation":
                 validator = GenerationValidator(
-                    model=self.model,
-                    tokenizer=self.tokenizer,
-                    validation_args=ValidationArguments(
-                        batch_size=32, data_collator=DataCollatorForCausalLM(self.tokenizer)
-                    ),
+                    model=model,
+                    tokenizer=tokenizer,
+                    validation_args=validation_arguments,
                     validation_data=self.dataset["generation"],
+                    max_length=self.config.generation_max_length,
                     metrics=[
                         BleuScore(target_key=self.config.generation_reference_column),
                         NistScore(target_key=self.config.generation_reference_column),
@@ -131,73 +148,35 @@ class LoRAExperiment(Experiment):
 
             trainer = Trainer(
                 output_dir=output_dir,
-                model=self.model,
+                model=model,
                 training_args=self.config.training_args,
                 train_data=self.dataset["train"],
                 callbacks=[
+                    EnergyCallback(output_dir=output_dir, nvidia_query_interval=10),
                     LoggingCallback(output_dir=output_dir),
                     ValidatorCallback(
                         output_dir=output_dir,
                         log_file="validation_log.csv",
                         validator=validator,
+                        validate_strategy=self.config.validate_strategy,
+                        validate_every=self.config.validate_every,
                     ),
                     FLOPsBudgetControllCallback(output_dir=output_dir, budget=1e9, should_stop_training=False),
-                    *self.load_additional_callbacks(),
-                    EnergyCallback(output_dir=output_dir, nvidia_query_interval=10),
+                    *self.load_additional_callbacks(rep_id=repid),
                 ],
             )
-            trainer.run()
+            trainer.train()
             if self.config.watch_done_file:
                 with open(done_file, "w") as f:
                     f.write("done")
+            del model, tokenizer, trainer, validator
+            torch.cuda.empty_cache()
             print(f"Repetition {repid} completed. Output saved to {output_dir}.")
 
 
 if __name__ == "__main__":
 
     config = experiment_config_cli(LoRAExperimentConfig)
-    print(config)
     experiment = LoRAExperiment(config)
     experiment.run()
-
-"""
-options:
-  -h, --help            show this help message and exit
-  --name NAME
-  --output_dir OUTPUT_DIR
-  --training_args.num_epochs TRAINING_ARGS.NUM_EPOCHS
-  --training_args.batch_size TRAINING_ARGS.BATCH_SIZE
-  --training_args.data_collator TRAINING_ARGS.DATA_COLLATOR
-  --training_args.learning_rate TRAINING_ARGS.LEARNING_RATE
-  --training_args.weight_decay TRAINING_ARGS.WEIGHT_DECAY
-  --training_args.monitor_strategy TRAINING_ARGS.MONITOR_STRATEGY
-  --training_args.monitor_every TRAINING_ARGS.MONITOR_EVERY
-  --training_args.checkpoint_strategy TRAINING_ARGS.CHECKPOINT_STRATEGY
-  --training_args.checkpoint_every TRAINING_ARGS.CHECKPOINT_EVERY
-  --training_args.model_save_function TRAINING_ARGS.MODEL_SAVE_FUNCTION
-  --description DESCRIPTION
-  --num_repetitions NUM_REPETITIONS
-  --watch_done_file WATCH_DONE_FILE
-  --base_model_name BASE_MODEL_NAME
-  --tokenizer_name TOKENIZER_NAME
-  --lora_rank LORA_RANK
-  --lora_alpha LORA_ALPHA
-  --lora_dropout LORA_DROPOUT
-  --dataset_name DATASET_NAME
-  --dataset_validation DATASET_VALIDATION
-  --generation_reference_column GENERATION_REFERENCE_COLUMN
-
-
-python3 -m ftt.approaches.lora \
-    --name "LoRA Experiment" \
-    --description "LoRA experiment" \
-    --output_dir "./out/lora_experiment" \
-    --training_args.num_epochs 5 \
-    --training_args.batch_size 1 \
-    --training_args.learning_rate 5e-6 \
-    --num_repetitions 5 \
-    --watch_done_file True \
-    --base_model_name "meta-llama/Llama-3.2-1B" \
-    --dataset_name "glue_mrpc" \
-    --dataset_validation "forward" \
-"""
+    print("Experiment completed successfully.")

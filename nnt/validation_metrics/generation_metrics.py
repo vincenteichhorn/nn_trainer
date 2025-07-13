@@ -44,7 +44,9 @@ class BleuScore(ValidationMetric):
         """
         if not self.scores:
             return {"bleu": 0.0}
-        return {"bleu": sum(self.scores) / len(self.scores)}
+        out = {"bleu": sum(self.scores) / len(self.scores)}
+        self.scores = []
+        return out
 
 
 class NistScore(ValidationMetric):
@@ -85,7 +87,9 @@ class NistScore(ValidationMetric):
         """
         if not self.scores:
             return {"nist": 0.0}
-        return {"nist": sum(self.scores) / len(self.scores)}
+        out = {"nist": sum(self.scores) / len(self.scores)}
+        self.scores = []
+        return out
 
 
 class RougeScore(ValidationMetric):
@@ -133,7 +137,9 @@ class RougeScore(ValidationMetric):
         """
         if not self.scores:
             return {key: 0.0 for key in self.rouge.metrics}
-        return {key: sum(values) / len(values) for key, values in self.scores.items()}
+        out = {key: sum(values) / len(values) for key, values in self.scores.items()}
+        self.score = {}
+        return out
 
 
 class MeteorScore(ValidationMetric):
@@ -180,4 +186,6 @@ class MeteorScore(ValidationMetric):
         """
         if not self.scores:
             return {"meteor": 0.0}
-        return {"meteor": sum(self.scores) / len(self.scores)}
+        out = {"meteor": sum(self.scores) / len(self.scores)}
+        self.scores = []
+        return out
