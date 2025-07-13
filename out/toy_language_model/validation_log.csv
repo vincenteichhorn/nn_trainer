@@ -1,2 +1,2 @@
 epoch,global_step,learning_rate,timestamp,train_loss,OneHotClassificationMetrics_accuracy,OneHotClassificationMetrics_precision,OneHotClassificationMetrics_recall,OneHotClassificationMetrics_f1_score,OneHotClassificationMetrics_mcc
-0.0,0,0.001,2025-07-12 20-58-12.354794,None,0.3235294117647059,0.5714285714285714,0.043010752688172046,0.08000000000000002,-0.056307234855293015
+0.0,0,0.001,2025-07-13 12-53-06.151056,None,0.37254901960784315,0.7674418604651163,0.11827956989247312,0.20496894409937888,0.06172377749689964

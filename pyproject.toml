@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Vincent Eichhorn <vincent.eichhorn@student.hpi.uni-potsdam.de>"]
 readme = "README.md"
-packages = [{ include = "nnt" }]
+packages = [{ include = "nnt" }, { include = "ftt" }, { include = "examples" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12"

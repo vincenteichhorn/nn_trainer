@@ -126,7 +126,7 @@ Explore the folder for more scripts demonstrating various features of NN Trainer
 
 ## Features
 
-- **Flexible Dataset API:** Easily create custom datasets by subclassing `CausalLMDataset`.
+- **Flexible Dataset API:** Easily create custom datasets by subclassing `Dataset`.
 - **Profiling:** Integrated GPU/CPU profiling and FLOPs/energy tracking.
 - **Validation & Metrics:** Modular validation and metric computation for classification and generation tasks.
 - **Callbacks:** Logging, validation, FLOPs budget, and energy tracking callbacks.

@@ -3,7 +3,7 @@ from nnt.callbacks.flops_budget_callback import FLOPsBudgetControllCallback
 from nnt.callbacks.logging_callback import LoggingCallback
 from nnt.callbacks.validator_callback import ValidatorCallback
 from nnt.collators.causal_lm_data_collators import DataCollatorForCausalLM
-from nnt.datasets.causal_lm_dataset import AlpacaSmallDatasetTruncated, GlueDatasets
+from ftt.datasets import GlueDatasets
 from nnt.models.toy_models import ToyLanguageModel
 from nnt.trainer import Trainer, TrainingArguments
 from nnt.validation_metrics.classification_metrics import OneHotClassificationMetrics
@@ -32,7 +32,7 @@ if __name__ == "__main__":
         model=model,
         tokenizer=tokenizer,
         validation_args=ValidationArguments(batch_size=32, data_collator=DataCollatorForCausalLM(tokenizer)),
-        validation_data=dataset["generation"],
+        validation_data=dataset["validation"],
         metrics=[
             BleuScore(target_key="sentence1"),
             NistScore(target_key="sentence1"),
