@@ -91,10 +91,10 @@ class ClassificationMetrics:
             self.confusion_matrix = np.zeros_like(self.confusion_matrix)
             return {
                 "accuracy": float(accuracy),
-                "precision": float(precision),
-                "recall": float(recall),
-                "f1_score": float(f1_score),
-                "mcc": float(mcc),
+                "precision": float(precision) if not isinstance(precision, np.ndarray) else precision.tolist(),
+                "recall": float(recall) if not isinstance(recall, np.ndarray) else recall.tolist(),
+                "f1_score": float(f1_score) if not isinstance(f1_score, np.ndarray) else f1_score.tolist(),
+                "mcc": float(mcc) if mcc is not None else None,
             }
 
 

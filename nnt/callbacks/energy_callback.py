@@ -27,7 +27,7 @@ class EnergyCallback(TrainerCallback):
 
     prof: NvidiaProfiler | None
 
-    def __init__(self, output_dir: str, nvidia_query_interval: int = 10):
+    def __init__(self, output_dir: str, nvidia_profiler: NvidiaProfiler = None, nvidia_query_interval: int = 10):
         """
         Initialize the EnergyCallback and start NvidiaProfiler if available.
 
@@ -37,16 +37,18 @@ class EnergyCallback(TrainerCallback):
         """
         energy_log = os.path.join(output_dir, "energy_log.csv")
         # check if nvidia-smi is available by calling it
-        self.prof = None
-        if subprocess.getstatusoutput("nvidia-smi")[0] == 0:
-            self.prof = NvidiaProfiler(
-                interval=nvidia_query_interval,
-                cache_file=energy_log,
-            )
+        self.prof = nvidia_profiler
+        if subprocess.getstatusoutput("nvidia-smi")[0] == 0 and self.prof is None:
+            self.prof = NvidiaProfiler(interval=nvidia_query_interval, cache_file=energy_log, force_cache=True)
             self.prof.start()
-        else:
+        elif subprocess.getstatusoutput("nvidia-smi")[0] != 0:
             warnings.warn(
                 "NVIDIA GPU not detected or nvidia-smi not available. EnergyCallback will not be active.",
+                UserWarning,
+            )
+        else:
+            warnings.warn(
+                "NvidiaProfiler already initialized. EnergyCallback will use the existing profiler.",
                 UserWarning,
             )
 
@@ -129,6 +131,7 @@ class EnergyCallback(TrainerCallback):
         if self.prof is None:
             return
         self.prof.record_step("training_end")
+        self.prof.stop()
 
     def on_checkpoint(self, info: dict, trainer: "Trainer") -> None:
         """

@@ -75,7 +75,11 @@ class NistScore(ValidationMetric):
     def compute(self, predicted_batch: "PredictedBatch") -> None:
         generations = predicted_batch.prediction
         references = predicted_batch.reference_data[self.target_key]
-        scores = self.nist.compute(predictions=generations, references=references)
+        try:
+            scores = self.nist.compute(predictions=generations, references=references)
+        except Exception as e:
+            print(f"Error computing NIST score: {e}")
+            scores = {"nist_mt": 0.0}
         self.scores.extend([scores["nist_mt"]] * len(generations))
 
     def finalize(self) -> dict:

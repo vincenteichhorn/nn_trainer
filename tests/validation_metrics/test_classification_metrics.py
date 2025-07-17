@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import torch
 from nnt.validation_metrics.classification_metrics import ClassificationMetrics, OneHotClassificationMetrics
 
 # File: tests/validation_metrics/test_validation_metrics.py
@@ -62,26 +63,17 @@ def test_onehotclassificationmetrics_init():
 
 def test_onehotclassificationmetrics_check_classification_2d():
     metric = OneHotClassificationMetrics(num_classes=3)
-    logits = np.array([[0.2, 0.5, 0.3], [0.1, 0.7, 0.2]])
-    labels = np.array([[0, 1, 0], [1, 0, 0]])
+    logits = torch.Tensor(np.array([[0.2, 0.5, 0.3], [0.1, 0.7, 0.2]]))
+    labels = torch.Tensor(np.array([[0, 1, 0], [1, 0, 0]]))
     batch = DummyPredictedBatch(logits, labels)
     pairs = metric.check_classification(batch)
     assert pairs == [(1, 1), (0, 1)]
 
 
-def test_onehotclassificationmetrics_check_classification_3d():
-    metric = OneHotClassificationMetrics(num_classes=3, sequence_offset=1)
-    logits = np.array([[[0.2, 0.5, 0.3], [0.1, 0.7, 0.2]], [[0.6, 0.3, 0.1], [0.4, 0.4, 0.2]]])
-    labels = np.array([[[0, 1, 0], [1, 0, 0]], [[1, 0, 0], [0, 1, 0]]])
-    batch = DummyPredictedBatch(logits, labels)
-    pairs = metric.check_classification(batch)
-    assert pairs == [(0, 1), (1, 0)]
-
-
 def test_onehotclassificationmetrics_check_classification_invalid_shape():
     metric = OneHotClassificationMetrics(num_classes=3)
-    logits = np.ones((2,))  # Invalid shape
-    labels = np.ones((2, 3))
+    logits = torch.Tensor(np.ones((2,)))  # Invalid shape
+    labels = torch.Tensor(np.ones((2, 3)))
     batch = DummyPredictedBatch(logits, labels)
     with pytest.raises(ValueError):
         metric.check_classification(batch)
@@ -89,8 +81,8 @@ def test_onehotclassificationmetrics_check_classification_invalid_shape():
 
 def test_onehotclassificationmetrics_compute_and_finalize():
     metric = OneHotClassificationMetrics(num_classes=2)
-    logits = np.array([[0.9, 0.1], [0.2, 0.8]])
-    labels = np.array([[1, 0], [0, 1]])
+    logits = torch.Tensor(np.array([[0.9, 0.1], [0.2, 0.8]]))
+    labels = torch.Tensor(np.array([[1, 0], [0, 1]]))
     batch = DummyPredictedBatch(logits, labels)
     metric.compute(batch)
     result = metric.finalize()

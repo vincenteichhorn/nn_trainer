@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+import sys
 from typing import List, Literal, Tuple
 import torch
 from transformers import PreTrainedTokenizer
@@ -14,6 +15,7 @@ from nnt.callbacks.trainer_callback import TrainerCallback
 from nnt.callbacks.validator_callback import ValidatorCallback
 from nnt.collators.causal_lm_data_collators import DataCollatorForCausalLM
 from nnt.experiment import Experiment, ExperimentConfig, experiment_config_cli
+from nnt.profiling.nvidia_profiler import NvidiaProfiler
 from nnt.trainer import Trainer
 from nnt.validation_metrics.classification_metrics import OneHotClassificationMetrics
 from nnt.validation_metrics.generation_metrics import BleuScore, MeteorScore, NistScore, RougeScore
@@ -59,7 +61,7 @@ class LoRAExperiment(Experiment):
         self.model = model
         self.tokenizer = tokenizer
         self.dataset = get_dataset(self.config.dataset_name)
-        self.dataset.prepare(self.tokenizer)
+        self.is_dataset_prepared = False
 
         if self.config.training_args.data_collator is None:
             self.config.training_args.data_collator = DataCollatorForCausalLM(self.tokenizer)
@@ -112,6 +114,9 @@ class LoRAExperiment(Experiment):
                 print(f"Skipping repetition {repid} as done file exists: {done_file}")
                 continue
             print(f"Running repetition {repid} with output directory: {output_dir}")
+            if not self.is_dataset_prepared:
+                self.dataset.prepare(self.tokenizer)
+                self.is_dataset_prepared = True
 
             validator = None
             validation_arguments = ValidationArguments(
@@ -145,14 +150,9 @@ class LoRAExperiment(Experiment):
                         MeteorScore(target_key=self.config.generation_reference_column),
                     ],
                 )
-
-            trainer = Trainer(
-                output_dir=output_dir,
-                model=model,
-                training_args=self.config.training_args,
-                train_data=self.dataset["train"],
-                callbacks=[
-                    EnergyCallback(output_dir=output_dir, nvidia_query_interval=10),
+            energy_log = os.path.join(output_dir, "energy_log.csv")
+            with NvidiaProfiler(interval=10, cache_file=energy_log, force_cache=True) as prof:
+                callbacks = [
                     LoggingCallback(output_dir=output_dir),
                     ValidatorCallback(
                         output_dir=output_dir,
@@ -161,17 +161,36 @@ class LoRAExperiment(Experiment):
                         validate_strategy=self.config.validate_strategy,
                         validate_every=self.config.validate_every,
                     ),
-                    FLOPsBudgetControllCallback(output_dir=output_dir, budget=1e9, should_stop_training=False),
                     *self.load_additional_callbacks(rep_id=repid),
-                ],
-            )
-            trainer.train()
+                ]
+                energy_callback = EnergyCallback(output_dir=output_dir, nvidia_profiler=prof)
+                if repid == 0:
+                    callbacks.extend(
+                        [
+                            FLOPsBudgetControllCallback(output_dir=output_dir, budget=1e9, should_stop_training=False),
+                            energy_callback,
+                        ]
+                    )
+                else:
+                    callbacks.append(energy_callback)
+                trainer = Trainer(
+                    output_dir=output_dir,
+                    model=model,
+                    training_args=self.config.training_args,
+                    train_data=self.dataset["train"],
+                    callbacks=callbacks,
+                )
+                trainer.train()
+                torch.cuda.synchronize()
+                del model, tokenizer, trainer, validator
+                torch.cuda.empty_cache()
+
+            print(f"Repetition {repid} completed. Output saved to {output_dir}.")
             if self.config.watch_done_file:
                 with open(done_file, "w") as f:
                     f.write("done")
-            del model, tokenizer, trainer, validator
-            torch.cuda.empty_cache()
-            print(f"Repetition {repid} completed. Output saved to {output_dir}.")
+
+        print("All repetitions completed successfully.")
 
 
 if __name__ == "__main__":

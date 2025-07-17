@@ -29,9 +29,9 @@ class NvidiaProfiler(Profiler):
 
     interval: float
     data: list
-    should_profiling_run: Value
-    profiling_started: Event
-    profiling_stopped: Event
+    should_profiling_run: Value # type: ignore
+    profiling_started: Event # type: ignore
+    profiling_stopped: Event # type: ignore
     result_handler: ResultHandler
     process: Process
     gpu_clock_speed: int | None
@@ -139,9 +139,9 @@ class NvidiaProfiler(Profiler):
 
     @staticmethod
     def _nvidiasmi_profiling_process(
-        should_run: Value,
-        started: Event,
-        stopped: Event,
+        should_run: Value, # type: ignore
+        started: Event, # type: ignore
+        stopped: Event, # type: ignore
         result_handler: ResultHandler,
         interval: int,
     ) -> None:

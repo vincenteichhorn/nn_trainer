@@ -1,0 +1,143 @@
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    mnli \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_mnli_matched --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    sst2 \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_sst2 --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    cola \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 3 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_cola --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    mrpc \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 10 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_mrpc --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    qnli \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_qnli --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    qqp \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_qqp --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    rte \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 10 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_rte --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    arc_easy \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name arc_easy --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    arc_challenge \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 8 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name arc_challenge --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    boolq \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name boolq --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    piqa \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name piqa --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    hellaswag \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name hellaswag --validation forward"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    allenai_task219_rocstories_title_answer_generation \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name allenai_task219_rocstories_title_answer_generation --validation generation --base_model_name meta-llama/Llama-3.2-1B-Instruct"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    allenai_task288_gigaword_summarization \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 5 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name allenai_task288_gigaword_summarization --validation generation --base_model_name meta-llama/Llama-3.2-1B-Instruct"
+
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    alpaca \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+    3-00:00:00 \
+    gx12 \
+    "--epochs 1 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name alpaca_mmlu --validation generation --base_model_name meta-llama/Llama-3.2-1B-Instruct"
+
+    
+
+
+bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+    bandits_arc_easy \
+    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/bandits.sh \
+    3-00:00:00 \
+    gx13 \
+    "--epochs 1 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name arc_easy --validation forward"

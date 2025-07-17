@@ -133,5 +133,5 @@ class Validator:
                     metric.compute(predicted_batch)
 
         results = {metric.__class__.__name__: metric.finalize() for metric in self.metrics}
-
+        print(f"Finished validation with results: {results}")
         return results

@@ -46,7 +46,6 @@ def get_dataset(name: str, *args, **kwargs) -> CausalLMDataset:
     Raises:
         ValueError: If the dataset name is not recognized.
     """
-
     if name == "alpaca_mmlu":
         return AlpacaMMLUDataset(*args, **kwargs)
     elif name.startswith("glue_"):
@@ -61,12 +60,12 @@ def get_dataset(name: str, *args, **kwargs) -> CausalLMDataset:
         return PIQADataset(*args, **kwargs)
     elif name == "hellaswag":
         return HellaSwagDataset(*args, **kwargs)
-    elif name.startswith("allanai_"):
-        name = name.split("allanai_")[1]
-        return AllanAIDataset(name, *args, **kwargs)
+    elif name.startswith("allenai_"):
+        name = name.split("allenai_")[1]
+        return AllenAIDataset(name, *args, **kwargs)
     else:
         raise ValueError(
-            f"Dataset {name} not found. Available datasets: alpaca, alpaca_small, glue_<task_name>, arc_<subset>, piqa, hellaswag, allanai_<name>."
+            f"Dataset {name} not found. Available datasets: alpaca, alpaca_small, glue_<task_name>, arc_<subset>, piqa, hellaswag, allenai_<name>."
         )
 
 
@@ -178,7 +177,7 @@ class GlueDatasets(CausalLMDataset):
             **kwargs: Additional keyword arguments.
         """
         self.task_name = task_name
-        self.train_set_size = 16  # train_set_size
+        self.train_set_size = None  # if None then use all samples
         super().__init__(*args, **kwargs)
         assert task_name in self.available_tasks(), f"Task {task_name} not available."
 
@@ -246,7 +245,7 @@ class GlueDatasets(CausalLMDataset):
             ds["train"] = train_ds["train"]
         self.train_set_size = self.train_set_size or len(ds["train"])
         self["train"] = DataSplit.from_iterable(ds["train"].select(range(self.train_set_size)))
-        self["validation"] = DataSplit.from_iterable(ds["validation"].select(range(16)))
+        self["validation"] = DataSplit.from_iterable(ds["validation"])
 
     def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
         """
@@ -310,7 +309,10 @@ class AlpacaMMLUDataset(CausalLMDataset):
         Returns:
             None
         """
-        alpaca_ds = load_dataset("tatsu-lab/alpaca")
+        alpaca_ds = load_dataset("tatsu-lab/alpaca", split="train")
+        num_validation = 1000
+        alpaca_train = alpaca_ds.select(range(len(alpaca_ds) - num_validation))
+        alpaca_validation = alpaca_ds.select(range(len(alpaca_ds) - num_validation, len(alpaca_ds)))
         mmlu_ds = load_dataset("cais/mmlu", "all")
 
         mmlu_validation = pd.DataFrame(mmlu_ds["validation"])
@@ -324,9 +326,9 @@ class AlpacaMMLUDataset(CausalLMDataset):
                 columns={0: "few_shot"}
             )
 
-        self["train"] = DataSplit.from_iterable(alpaca_ds["train"])
+        self["train"] = DataSplit.from_iterable(alpaca_train)
         self["validation"] = DataSplit.from_pandas(mmlu_validation)
-        self["generation"] = DataSplit.from_pandas(mmlu_validation)
+        self["generation"] = DataSplit.from_iterable(alpaca_validation)
 
     def mmlu_prompt(self, example: Dict[str, Any]) -> str:
         """
@@ -379,8 +381,8 @@ class AlpacaMMLUDataset(CausalLMDataset):
                 .add_turn("user", f"{few_shot}{self.mmlu_prompt(example)}")
                 .add_turn("assistant", alpha[example["answer"]])
             )
-        else:
-            conversation = LMConversation().add_turn("user", f"{few_shot}{self.mmlu_prompt(example)}")
+        elif split_name == "generation":
+            conversation = LMConversation().add_turn("user", f"{example['instruction']} {example['input']}")
         return conversation
 
     def get_task_classes(self) -> List[str]:
@@ -390,7 +392,7 @@ class AlpacaMMLUDataset(CausalLMDataset):
         Returns:
             List[str]: List of class labels.
         """
-        return list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        return list("ABCD")
 
 
 class ArcDataset(CausalLMDataset):
@@ -436,10 +438,14 @@ class ArcDataset(CausalLMDataset):
         Returns:
             LMConversation: The chat built from the example.
         """
-        passage = example["passage"]
         question = example["question"]
-        answer = example["answer"]
-        conversation = LMConversation().add_turn("user", f"{passage}\nQuestion: {question}?").add_turn("assistant", answer)
+        alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        choices = "".join([f"{alph}: {choice}, " for alph, choice in zip(alpha, example["choices"]["text"])])
+        # remove last comma and space
+        choices = choices[:-2] + "."
+        correct_idx = example["choices"]["label"].index(example["answerKey"])
+        answer = alpha[correct_idx]
+        conversation = LMConversation().add_turn("user", f"{question}\n{choices}").add_turn("assistant", answer)
         return conversation
 
     def get_task_classes(self) -> List[str]:
@@ -449,7 +455,7 @@ class ArcDataset(CausalLMDataset):
         Returns:
             List[str]: List of class labels.
         """
-        return ["False", "True"]
+        return list("ABCDEFGHIJ")
 
 
 class PIQADataset(CausalLMDataset):
@@ -562,10 +568,10 @@ class HellaSwagDataset(CausalLMDataset):
         Returns:
             List[str]: List of class labels.
         """
-        return list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        return list("ABCD")
 
 
-class AllanAIDataset(CausalLMDataset):
+class AllenAIDataset(CausalLMDataset):
     """
     Dataset class for AllenAI Natural Instructions datasets.
     """
@@ -595,7 +601,9 @@ class AllanAIDataset(CausalLMDataset):
             None
         """
         base_url = "https://raw.githubusercontent.com/allenai/natural-instructions/refs/heads/master/tasks/"
-        ds_dir = os.path.join(os.environ.get("SHARED_DIR", ""), "datasets/alanai")
+        ds_dir = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/datasets/alanai"
+        if not os.path.exists(ds_dir):
+            os.makedirs(ds_dir, exist_ok=True)
         if f"{self.name}.json" not in os.listdir(ds_dir):
             urllib.request.urlretrieve(
                 f"{base_url}{self.name}.json",
@@ -658,7 +666,7 @@ class BoolQDataset(CausalLMDataset):
         self["validation"] = DataSplit.from_iterable(ds["validation"])
         return ds
 
-    def build_chat(self, example: Dict[str, Any], split: str = "") -> LMConversation:
+    def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
         """
         Build a chat from a BoolQ example.
 

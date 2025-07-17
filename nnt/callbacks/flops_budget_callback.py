@@ -8,6 +8,7 @@ import torch
 from nnt.callbacks.trainer_callback import TrainerCallback
 from nnt.profiling.torch_profiler import TorchProfiler
 from nnt.util.fast_csv import FastCSV
+from nnt.util.monitor import Monitor
 
 
 if TYPE_CHECKING:
@@ -60,19 +61,8 @@ class FLOPsBudgetControllCallback(TrainerCallback):
         self.fast_csv_writer = FastCSV(self.flop_budget_file, force=True)
         self.fast_writer_has_set_columns = False
 
-        self.skip_info_keys = ["current_batch"]
+        self.skip_info_keys = ["current_batch", "train_layers_with_gradients"]
         self.cumulative_flops = 0
-
-    def _batch_signature(self, batch: dict) -> str:
-        """
-        Generate a signature for the batch based on tensor shapes for FLOPs memorization.
-
-        Args:
-            batch (dict): Batch of input tensors.
-        Returns:
-            str: Signature string representing batch shapes.
-        """
-        str(tuple(batch[k].shape for k in batch if isinstance(batch[k], torch.Tensor)))
 
     def on_step_begin(self, info: dict, trainer: "Trainer") -> None:
         """
@@ -83,7 +73,9 @@ class FLOPsBudgetControllCallback(TrainerCallback):
             trainer (Trainer): Trainer instance.
         """
         batch = info["current_batch"]
-        signature = self._batch_signature(batch)
+        model_signature = "-".join([name for name, param in trainer.model.named_parameters() if param.requires_grad])
+        batch_signature = "-".join([str(batch[k].shape) for k in batch if isinstance(batch[k], torch.Tensor)])
+        signature = f"{model_signature}-{batch_signature}"
         model = trainer.model
         if signature not in self.flops_memorization_table:
             with TorchProfiler() as prof:

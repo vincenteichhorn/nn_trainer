@@ -58,7 +58,7 @@ class GenerationValidator(Validator):
         with torch.no_grad():
             generated = self.model.generate(
                 input_ids=batch["input_ids"],
-                max_length=self.max_length,
+                max_new_tokens=self.max_length,
                 temperature=self.temperature,
                 pad_token_id=self.tokenizer.pad_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,

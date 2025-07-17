@@ -1,6 +1,6 @@
 import pytest
 from nnt.datasets.dataset import DataSplit
-from nnt.datasets.causal_lm_dataset import LMConversation, CausalLMDataset, AlpacaDataset
+from nnt.datasets.causal_lm_dataset import LMConversation, CausalLMDataset
 
 
 class DummyTokenizer:

@@ -206,6 +206,7 @@ class Trainer:
                     desc=f"Batches (Epoch {epoch_id + 1}/{self.training_args.num_epochs})",
                     total=len(self.train_batches),
                 ):
+                    self.model.train()
                     if self._should_stop:
                         self._call_callbacks("on_training_end", _get_info())
                         self._save_model(global_step)

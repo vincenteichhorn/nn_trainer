@@ -73,8 +73,8 @@ class GreenTrainerApproach(LoRAExperiment):
 
 if __name__ == "__main__":
 
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     config = experiment_config_cli(GreenTrainerApproachConfig, verbose=True)
     experiment = GreenTrainerApproach(config)
     experiment.run()
     print("Experiment completed successfully.")
-    os.kill(os.getpid(), signal.SIGKILL)

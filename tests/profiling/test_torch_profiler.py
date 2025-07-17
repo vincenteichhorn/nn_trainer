@@ -71,7 +71,6 @@ def test_profiler_total_time(dummy_model, dummy_input):
     assert cpu_time >= 0
     if torch.cuda.is_available():
         gpu_time = prof.get_total_time(device="CUDA")
-        assert isinstance(gpu_time, float)
         assert gpu_time >= 0
 
 

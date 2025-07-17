@@ -1,5 +1,6 @@
 import os
 import signal
+import sys
 from typing import List, Literal, Tuple
 from transformers import PreTrainedTokenizer
 from torch.nn import Module
@@ -71,8 +72,8 @@ class StaticApproach(LoRAExperiment):
 
 if __name__ == "__main__":
 
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     config = experiment_config_cli(StaticApproachConfig, verbose=True)
     experiment = StaticApproach(config)
     experiment.run()
     print("Experiment completed successfully.")
-    os.kill(os.getpid(), signal.SIGKILL)
