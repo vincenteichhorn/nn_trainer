@@ -37,11 +37,26 @@ exp_names = [
     "allenai_task219_rocstories_title_answer_generation",
 ]
 
+selected_energy_metric = st.selectbox(
+    "Select Energy Metric",
+    ["flops_savings", "rel_flops_savings", "energy_savings", "rel_energy_savings", "time_savings", "rel_time_savings"],
+    index=2,
+)
+
+options_list = [
+    "show_error",
+    "print_full_lora_baseline",
+    "print_basemodel_performance",
+    "show_basemodel_performance",
+]
+options = st.multiselect("Options", options_list, default=[])
+
 
 def get_x_axis_metrics(exp_name):
+    return selected_energy_metric
     # return "flops_savings"
     # return "rel_flops_savings"
-    return "energy_savings"
+    # return "energy_savings"
     # return "time_savings"
     # return "rel_energy_savings"
 
@@ -51,8 +66,9 @@ def get_x_axis_name(exp_name):
         "flops_savings": "Abs. FLOPs Savings (Compared to Full LoRA)",
         "rel_flops_savings": "Rel. FLOPs Savings (%)",
         "energy_savings": "Abs. Energy Savings (Compared to Full LoRA)",
-        "time_savings": "Abs. Time Savings (Compared to Full LoRA)",
         "rel_energy_savings": "Rel. Energy Savings (%)",
+        "time_savings": "Abs. Time Savings (Compared to Full LoRA)",
+        "rel_time_savings": "Rel. Time Savings (%)",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -62,8 +78,9 @@ def get_baseline_energy_metric_name(exp_name):
         "flops_savings": "total_flops_mean",
         "rel_flops_savings": "total_flops_mean",
         "energy_savings": "train_energy_mean",
-        "time_savings": "train_time_mean",
         "rel_energy_savings": "train_energy_mean",
+        "time_savings": "train_time_mean",
+        "rel_time_savings": "train_time_mean",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -73,8 +90,9 @@ def get_baseline_energy_sem_name(exp_name):
         "flops_savings": "zero",
         "rel_flops_savings": "zero",
         "energy_savings": "train_energy_sem",
-        "time_savings": "train_time_sem",
         "rel_energy_savings": "train_energy_sem",
+        "time_savings": "train_time_sem",
+        "rel_time_savings": "train_time_sem",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -84,8 +102,9 @@ def get_energy_metric_name(exp_name):
         "flops_savings": "flops_savings",
         "rel_flops_savings": "rel_flops_savings",
         "energy_savings": "energy_savings",
-        "time_savings": "time_savings",
         "rel_energy_savings": "rel_energy_savings",
+        "time_savings": "time_savings",
+        "rel_time_savings": "rel_time_savings",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -95,8 +114,9 @@ def get_energy_sem_name(exp_name):
         "flops_savings": "zero",
         "rel_flops_savings": "zero",
         "energy_savings": "energy_savings_sem",
-        "time_savings": "time_savings_sem",
         "rel_energy_savings": "rel_energy_savings_sem",
+        "time_savings": "time_savings_sem",
+        "rel_time_savings": "rel_time_savings_sem",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -254,13 +274,13 @@ def add_to_pareto_front(
                     error_x=dict(
                         type="data",
                         array=[dot["x_sem"]],
-                        visible=True,  # not dot["is_dominated"],
+                        visible="show_error" in options,
                         color=dot["color"],
                     ),
                     error_y=dict(
                         type="data",
                         array=[dot["y_sem"]],
-                        visible=True,  # not dot["is_dominated"],
+                        visible="show_error" in options,
                         color=dot["color"],
                     ),
                 ),
@@ -355,7 +375,10 @@ def plt(st_obj: st = st):
             "y": [pretrained_model_perfornmance[exp] for exp in exp_names],
         }
     )
-    st.write(baselines_df)
+    if "print_full_lora_baseline" in options:
+        st.write(baselines_df)
+    if "print_basemodel_performance" in options:
+        st.write(pretrained_model_perfornmance)
 
     top_df = compute_energy_savings(top_df, baselines, baselines_sems)
     annotation_cols = {exp: "nlayer" for exp in exp_names}
@@ -498,20 +521,21 @@ def plt(st_obj: st = st):
         width=1200,
     )
 
-    for i, exp in enumerate(exp_names):
-        row = i // 4 + 1
-        col = i % 4 + 1
-        fig.add_hline(
-            y=pretrained_model_perfornmance.loc[pretrained_model_perfornmance["dataset"] == exp, "y"].values[0],
-            line_dash="dash",
-            line_color="black",
-            annotation_text=f"Pretrained Model",
-            annotation_position="top left",
-            annotation_font_color="black",
-            annotation_font_size=10,
-            row=row,
-            col=col,
-        )
+    if "show_basemodel_performance" in options:
+        for i, exp in enumerate(exp_names):
+            row = i // 4 + 1
+            col = i % 4 + 1
+            fig.add_hline(
+                y=pretrained_model_perfornmance.loc[pretrained_model_perfornmance["dataset"] == exp, "y"].values[0],
+                line_dash="dash",
+                line_color="black",
+                annotation_text=f"Pretrained Model",
+                annotation_position="top left",
+                annotation_font_color="black",
+                annotation_font_size=10,
+                row=row,
+                col=col,
+            )
 
     st.plotly_chart(fig, use_container_width=True)
 

@@ -29,9 +29,9 @@ class NvidiaProfiler(Profiler):
 
     interval: float
     data: list
-    should_profiling_run: Value # type: ignore
-    profiling_started: Event # type: ignore
-    profiling_stopped: Event # type: ignore
+    should_profiling_run: Value  # type: ignore
+    profiling_started: Event  # type: ignore
+    profiling_stopped: Event  # type: ignore
     result_handler: ResultHandler
     process: Process
     gpu_clock_speed: int | None
@@ -139,9 +139,9 @@ class NvidiaProfiler(Profiler):
 
     @staticmethod
     def _nvidiasmi_profiling_process(
-        should_run: Value, # type: ignore
-        started: Event, # type: ignore
-        stopped: Event, # type: ignore
+        should_run: Value,  # type: ignore
+        started: Event,  # type: ignore
+        stopped: Event,  # type: ignore
         result_handler: ResultHandler,
         interval: int,
     ) -> None:
@@ -337,9 +337,10 @@ class NvidiaProfiler(Profiler):
         df = df[df["gpu_id"].isin(gpu_ids)]
         record_steps = record_steps or list(df["record_step"].unique())
         df = df[df["record_step"].isin(record_steps)]
+        time_spans = list(df.groupby("record_step_id")["timestamp"].apply(lambda x: (x.max() - x.min()).total_seconds()))
         if return_data:
-            return list(df.groupby("record_step_id")["timestamp"].apply(lambda x: (x.max() - x.min()).total_seconds()))
-        return (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
+            return time_spans
+        return sum(time_spans)
 
     def get_max_memory(
         self, gpu_id: int | None = None, record_steps: list | None = None, return_data: bool = False
