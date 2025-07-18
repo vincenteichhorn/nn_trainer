@@ -499,7 +499,7 @@ def plt(st_obj: st = st):
             legend_group="dLinUCB Bandit (gamma-lambda-delta-sigma)",
         )
         bayesian_df = ban_df[ban_df["bandit"] == "Bayesian"]
-        bayesian_df["annotation"] = bayesian_df["beta"].astype(str)
+        bayesian_df["annotation"] = bayesian_df["alpha"].astype(str) + "-" + bayesian_df["beta"].astype(str)
         annotation_cols = {exp: "annotation" for exp in exp_names}
         fig = add_to_pareto_front(
             fig,
@@ -511,7 +511,7 @@ def plt(st_obj: st = st):
             y_axis_sem_metrics,
             annotation_cols,
             color="cyan",
-            legend_group="Bayesian Bandit (beta)",
+            legend_group="Bayesian Bandit (alpha-beta)",
         )
     except FileNotFoundError:
         pass

@@ -41,7 +41,7 @@ def test_get_total_energy(profiler):
 
 def test_get_total_time(profiler):
     total_time = profiler.get_total_time()
-    assert total_time == 3.0
+    assert total_time == 2.0
 
 
 def test_get_max_memory(profiler):

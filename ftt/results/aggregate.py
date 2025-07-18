@@ -7,6 +7,7 @@ import warnings
 import pandas as pd
 
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
+from nnt.util.monitor import Monitor
 
 
 def mask_brackets_in_csv(path: str) -> str:
@@ -94,12 +95,12 @@ if __name__ == "__main__":
 
     df = pd.DataFrame()
 
-    for dataset_run in dataset_folders:
-        print(f"Processing dataset: {dataset_run}")
+    for dataset_run in Monitor().tqdm(dataset_folders, desc="Processing Results"):
+        Monitor().print(f"Processing dataset: {dataset_run}")
         run_folders = [
             f.path for f in os.scandir(dataset_run) if f.is_dir() and os.path.exists(os.path.join(f.path, "donefile"))
         ]
-        for run in run_folders:
+        for run in Monitor().tqdm(run_folders, desc=f"Processing runs in {os.path.basename(dataset_run)}"):
             # print(f"Processing run: {run}")
             run_result = get_run_result(run)
             if not run_result:

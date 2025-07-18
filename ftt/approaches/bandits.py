@@ -80,10 +80,10 @@ class dUCBBandit(Bandit):
     def __init__(
         self,
         num_features: int,
-        gamma: float = 0.95,
-        lmbd: float = 1.0,
-        delta: float = 0.1,
-        sigma: float = 1.0,
+        gamma: float = 0.75,
+        lmbd: float = 0.001,
+        delta: float = 0.01,
+        sigma: float = 0.5,
         L: float = None,
         S: float = None,
         **kwargs,
@@ -136,8 +136,9 @@ class dUCBBandit(Bandit):
         beta = self.compute_beta()
 
         ucb_vals = []
-        for action, budget in zip(possible_actions, budget_increase or [1] * len(possible_actions)):
-            x = np.array(action)
+        if budget_increase is None:
+            budget_increase = [1] * len(possible_actions)
+        for x, budget in zip(possible_actions, budget_increase):
             v_inv_x = V_inv @ x
             w = np.linalg.inv(self.Ve) @ v_inv_x
             bonus = beta * np.sqrt(x @ w)
@@ -149,10 +150,10 @@ class dUCBBandit(Bandit):
         return possible_actions[idx]
 
     def update(self, action: List[float], reward: float):
-        x = np.array(action)
-        self.V = self.gamma * self.V + np.outer(x, x) + (1.0 - self.gamma) * self.lmbd * np.eye(self.num_features)
-        self.Ve = self.gamma**2 * self.Ve + np.outer(x, x) + (1.0 - self.gamma**2) * self.lmbd * np.eye(self.num_features)
-        self.b = self.gamma * self.b + reward * x
+        outer = np.outer(action, action)
+        self.V = self.gamma * self.V + outer + (1.0 - self.gamma) * self.lmbd * np.eye(self.num_features)
+        self.Ve = self.gamma**2 * self.Ve + outer + (1.0 - self.gamma**2) * self.lmbd * np.eye(self.num_features)
+        self.b = self.gamma * self.b + reward * action
 
     def reset(self):
         self.t = 0
@@ -163,57 +164,69 @@ class dUCBBandit(Bandit):
 
 
 class BayesianLinearRegressionBandit:
-
-    def __init__(self, num_features: int, beta: float = 1.0, **kwargs):
+    def __init__(self, num_features: int, alpha: float = 1.0, beta: float = 1.0):
         """
-        Initialize the Bayesian Linear Regression Bandit.
+        Bayesian Linear Regression Bandit (Thompson Sampling)
 
         Args:
-            num_features (int): Number of features (dimension of the action space).
+            num_features (int): Dimensionality of feature vectors.
+            alpha (float): Prior precision (1 / prior variance).
+            beta (float): Observation noise precision (1 / noise variance).
         """
-        self.beta = beta  # Precision of the noise
+        self.alpha = alpha
+        self.beta = beta
         self.num_features = num_features
-        self.A = np.eye(num_features)
-        self.b = np.zeros(num_features)
+        self.A = alpha * np.eye(num_features)  # Prior precision matrix
+        self.b = np.zeros(num_features)  # Prior mean vector
+        self.total_actions_selected = 0
+        self.action_counts = {}
+        self.reset()
 
-    def select_action(self, possible_actions: List[List[int]], budget_increase: List[int]) -> List[int]:
+    def select_action(self, possible_actions: np.ndarray, budget_increase: np.ndarray = None) -> np.ndarray:
         """
-        Select an action based on the current features and the A matrix.
+        Select an action using Thompson Sampling.
 
         Args:
-            possible_actions (List[List[int]]): List of possible actions.
+            possible_actions (List[List[int]]): List of action feature vectors.
 
         Returns:
             List[int]: Selected action.
         """
         A_inv = np.linalg.inv(self.A)
-        mu = A_inv @ self.b
-        sampled_theta = np.random.multivariate_normal(mu, A_inv / self.beta)
-        rewards = [
-            np.dot(sampled_theta, action) / 1
-            for action, increase in zip(possible_actions, budget_increase or [1] * len(possible_actions))
-        ]
-        idx = int(np.argmax(rewards))
-        return possible_actions[idx]
+        mu = A_inv @ self.b  # Posterior mean
+        cov = A_inv / self.beta  # Posterior covariance
+        sampled_theta = np.random.multivariate_normal(mu, cov)
+        rewards = possible_actions @ sampled_theta
+        bonus = np.array(
+            [
+                math.sqrt(2 * math.log(self.total_actions_selected + 1) / (self.action_counts.get(tuple(action), 0) + 1))
+                for action in possible_actions
+            ]
+        )
+        rewards += bonus / (budget_increase if budget_increase is not None else np.ones(len(possible_actions)))
+        selected_action = possible_actions[np.argmax(rewards)]
+        self.total_actions_selected += 1
+        if tuple(selected_action) not in self.action_counts:
+            self.action_counts[tuple(selected_action)] = 0
+        self.action_counts[tuple(selected_action)] += 1
+        return selected_action
 
-    def update(self, action: List[int], reward: float):
+    def update(self, action: np.ndarray, reward: float):
         """
-        Update the bandit state based on the selected action and received reward.
+        Update the belief based on new data.
 
         Args:
-            action (List[int]): The action that was taken.
-            reward (float): The reward received for the action.
+            action (List[int]): Feature vector of chosen action.
+            reward (float): Observed reward.
         """
-        x = np.array(action)
-        self.A += np.outer(x, x)
-        self.b += reward * x
+        self.A += self.beta * np.outer(action, action)
+        self.b += self.beta * reward * action
 
     def reset(self):
         """
-        Reset the bandit state.
-        This method should be called to reset the bandit for a new episode or run.
+        Reset to prior.
         """
-        self.A = np.eye(self.num_features)
+        self.A = self.alpha * np.eye(self.num_features)  # Prior precision
         self.b = np.zeros(self.num_features)
 
 
@@ -239,8 +252,10 @@ class BanditCallback(TrainerCallback):
         self.layer_id_parse_rule = layer_id_parse_rule
         self.current_loss = np.inf
         self.current_action = None
-        self.possible_actions = [[0] * i + [1] * (self.num_total_layers - i) for i in range(self.num_total_layers)]
-        self.budget_increase = [sum(action) for action in self.possible_actions]  # [1] * len(self.possible_actions)
+        self.possible_actions = np.array([[0] * i + [1] * (self.num_total_layers - i) for i in range(self.num_total_layers)])
+        self.budget_increase = np.array(
+            [sum(action) for action in self.possible_actions]
+        )  # [1] * len(self.possible_actions)
 
     def update_trainable_lora_layers(self, model, min_layer_id: int):
         """
@@ -269,7 +284,7 @@ class BanditCallback(TrainerCallback):
             trainer: The Trainer instance managing the training process.
         """
         self.current_action = self.bandit.select_action(self.possible_actions, self.budget_increase)
-        min_layer_id = self.current_action.index(max(self.current_action))
+        min_layer_id = list(self.current_action).index(max(self.current_action))
         self.update_trainable_lora_layers(trainer.model, min_layer_id)
         train_loss = info["train_loss"]
         if train_loss:
@@ -297,6 +312,7 @@ class BanditApproachConfig(LoRAExperimentConfig):
     lmda: float = 0.05
     delta: float = 0.1
     sigma: float = 1.0
+    alpha: float = 1.0
     beta: float = 1.0
     bandit: Literal["dUCB", "Bayesian"] = "dUCB"
 
@@ -324,6 +340,7 @@ class BanditApproach(LoRAExperiment):
                 f"lmda={self.config.lmda}",
                 f"delta={self.config.delta}",
                 f"sigma={self.config.sigma}",
+                f"alpha={self.config.alpha}",
                 f"beta={self.config.beta}",
             ]
         )

@@ -1,3 +1,5 @@
+import os
+import signal
 import subprocess
 import warnings
 from datetime import datetime
@@ -155,6 +157,7 @@ class NvidiaProfiler(Profiler):
             result_handler (ResultHandler): Handles shared memory for results.
             interval (int): Interval in milliseconds for nvidia-smi polling.
         """
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         def read_data(ln):
             try:
@@ -174,6 +177,7 @@ class NvidiaProfiler(Profiler):
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                preexec_fn=os.setsid,
             ) as nvidiasmi_process,
             result_handler as result,
         ):
@@ -189,7 +193,10 @@ class NvidiaProfiler(Profiler):
         result.put(None)
         stopped.set()
         nvidiasmi_process.terminate()
-        nvidiasmi_process.wait()
+        try:
+            nvidiasmi_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(nvidiasmi_process.pid), signal.SIGKILL)
 
     def __enter__(self) -> "NvidiaProfiler":
         """
@@ -207,12 +214,15 @@ class NvidiaProfiler(Profiler):
         """
         Stop the profiling process, collect all data, and terminate the process.
         """
-        self.should_profiling_run.value = 0
-        self.profiling_stopped.wait()
-        self.data = self.result_handler.get_all()
-        self.process.join()
-        self.process.terminate()
-        self.data = self._data_post_process(self.data)
+        try:
+            self.should_profiling_run.value = 0
+            self.profiling_stopped.wait(timeout=5)
+            self.data = self.result_handler.get_all()
+        finally:
+            if self.process.is_alive():
+                self.process.terminate()
+            self.process.join(timeout=5)
+            self.data = self._data_post_process(self.data)
 
     def start(self) -> None:
         """
