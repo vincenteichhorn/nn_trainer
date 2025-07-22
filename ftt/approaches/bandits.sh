@@ -49,50 +49,28 @@ echo "BASE_MODEL_NAME: $BASE_MODEL_NAME"
 echo "REPETITIONS: $REPETITIONS"
 echo "VALIDATION: $VALIDATION"
 
+run_and_check() {
+    "$@"
+    RET=$?
+    if [ $RET -ne 0 ]; then
+        echo "Command failed: $*"
+        exit $RET
+    fi
+}
 
 
-REPETITIONS=1
-
-for ALPHA in 0.1 0.25 0.5; do
-    for BETA in 0.75 1.0 1.25; do
-        echo "Running Bandit with ALPHA: $ALPHA, BETA: $BETA"
-        poetry run python3 -m ftt.approaches.bandits \
-            --output_dir "$BASE_OUTPUT_DIR/out/bandits/" \
-            --num_repetitions "$REPETITIONS" \
-            --training_args.num_epochs "$EPOCHS" \
-            --training_args.batch_size "$TRAIN_BATCH_SIZE" \
-            --training_args.learning_rate "$LEARNING_RATE" \
-            --base_model_name "$BASE_MODEL_NAME" \
-            --dataset_name "$DATASET_NAME" \
-            --dataset_validation "$VALIDATION" \
-            --validation_batch_size "$EVAL_BATCH_SIZE" \
-            --bandit Bayesian \
-            --alpha $ALPHA \
-            --beta $BETA
-    done
-done
-
-for DELTA in 0.01 0.25 0.5; do
-    for GAMMA in 0.6 0.7 0.8 0.9 0.99; do
-        for LAMBDA in 0.01; do
-            for SIGMA in 0.01 0.25 0.5 0.75 1.0; do
-                echo "Running Bandit with GAMMA: $GAMMA, DELTA: $DELTA, LAMBDA: $LAMBDA, SIGMA: $SIGMA"
-                poetry run python3 -m ftt.approaches.bandits \
-                    --output_dir "$BASE_OUTPUT_DIR/out/bandits/" \
-                    --num_repetitions "$REPETITIONS" \
-                    --training_args.num_epochs "$EPOCHS" \
-                    --training_args.batch_size "$TRAIN_BATCH_SIZE" \
-                    --training_args.learning_rate "$LEARNING_RATE" \
-                    --base_model_name "$BASE_MODEL_NAME" \
-                    --dataset_name "$DATASET_NAME" \
-                    --dataset_validation "$VALIDATION" \
-                    --validation_batch_size "$EVAL_BATCH_SIZE" \
-                    --bandit dUCB \
-                    --gamma $GAMMA \
-                    --lmda $LAMBDA \
-                    --delta $DELTA \
-                    --sigma $SIGMA
-            done
-        done
-    done
-done
+run_and_check poetry run python3 -m ftt.approaches.bandits \
+    --output_dir "$BASE_OUTPUT_DIR/out/bandits/" \
+    --num_repetitions "$REPETITIONS" \
+    --training_args.num_epochs "$EPOCHS" \
+    --training_args.batch_size "$TRAIN_BATCH_SIZE" \
+    --training_args.learning_rate "$LEARNING_RATE" \
+    --base_model_name "$BASE_MODEL_NAME" \
+    --dataset_name "$DATASET_NAME" \
+    --dataset_validation "$VALIDATION" \
+    --validation_batch_size "$EVAL_BATCH_SIZE" \
+    --bandit dLinUCB \
+    --gamma 0.8 \
+    --lmda 0.001 \
+    --delta 0.01 \
+    --sigma 0.1

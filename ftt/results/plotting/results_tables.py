@@ -1,12 +1,9 @@
-
-
-
 import os
 import streamlit as st
 from dotenv import load_dotenv
 import pandas as pd
 
-BASE_DIR =  "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/out/"
+BASE_DIR = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/out/"
 
 task_groups = {
     "NLU": [
@@ -47,8 +44,8 @@ exp_names = [
     "piqa",
     "boolq",
     "hellaswag",
-    "rocstories_title_answer_generation",
-    "gigaword_summarization",
+    "allenai_task219_rocstories_title_answer_generation",
+    "allenai_task288_gigaword_summarization",
     "alpaca_mmlu",
 ]
 
@@ -66,7 +63,7 @@ pretty_metrics = {
     "piqa": "Accuracy",
     "boolq": "Accuracy",
     "hellaswag": "Accuracy",
-    "task219_rocstories_title_answer_generation": "ROUGE-L",
+    "allenai_task219_rocstories_title_answer_generation": "ROUGE-L",
     "allenai_task288_gigaword_summarization": "ROUGE-L",
     "alpaca_mmlu": "ROUGE-L",
 }
@@ -85,7 +82,7 @@ pretty_names = {
     "piqa": "PIQA",
     "boolq": "BoolQ",
     "hellaswag": "HellaSwag",
-    "task219_rocstories_title_answer_generation": "ROCStories",
+    "allenai_task219_rocstories_title_answer_generation": "ROCStories",
     "allenai_task288_gigaword_summarization": "GigaWord",
     "alpaca_mmlu": "Alpaca",
 }
@@ -104,33 +101,68 @@ performance_metrics = {
     "piqa": "OneHotClassificationMetrics_accuracy_max_mean",
     "boolq": "OneHotClassificationMetrics_accuracy_max_mean",
     "hellaswag": "OneHotClassificationMetrics_accuracy_max_mean",
-    "task219_rocstories_title_answer_generation": "RougeScore_rougeL_max_mean",
+    "allenai_task219_rocstories_title_answer_generation": "RougeScore_rougeL_max_mean",
     "allenai_task288_gigaword_summarization": "RougeScore_rougeL_max_mean",
     "alpaca_mmlu": "RougeScore_rougeL_max_mean",
 }
 
+
 def get_base_table(df, add_cols=[]):
 
-    df["performance"] = df.apply(
-        lambda row: row[performance_metrics[row["dataset"]]] if row["dataset"] in performance_metrics else None, axis=1
-    ) * 100
-    df["performance_sem"] = df.apply(
-        lambda row: row[performance_metrics[row["dataset"]].replace("_mean", "_sem")] if row["dataset"] in performance_metrics else None, axis=1
-    ) * 100
-    cols_filter = ["train_energy_mean", "train_energy_sem", "total_energy_mean", "total_energy_sem", "train_time_mean", "train_time_sem", "total_time_mean", "total_time_sem", "dataset", "performance", "performance_sem", "total_flops_mean"]
+    df["performance"] = (
+        df.apply(
+            lambda row: row[performance_metrics[row["dataset"]]] if row["dataset"] in performance_metrics else None, axis=1
+        )
+        * 100
+    )
+    df["performance_sem"] = (
+        df.apply(
+            lambda row: (
+                row[performance_metrics[row["dataset"]].replace("_mean", "_sem")]
+                if row["dataset"] in performance_metrics
+                else None
+            ),
+            axis=1,
+        )
+        * 100
+    )
+    cols_filter = [
+        "train_energy_mean",
+        "train_energy_sem",
+        "total_energy_mean",
+        "total_energy_sem",
+        "train_time_mean",
+        "train_time_sem",
+        "total_time_mean",
+        "total_time_sem",
+        "dataset",
+        "performance",
+        "performance_sem",
+        "total_flops_mean",
+    ]
     cols_filter += add_cols
     df = df[cols_filter]
     return df
+
 
 def get_base_model_performance(df):
     """
     Get the base model performance from the dataframe.
     This is used to compare the performance of different models against the base model.
     """
-    df["performance"] = df.apply(
-        lambda row: row[performance_metrics[row["dataset"]].replace("max", "min")] if row["dataset"] in performance_metrics else None, axis=1
-    ) * 100
+    df["performance"] = (
+        df.apply(
+            lambda row: (
+                row[performance_metrics[row["dataset"]].replace("max", "min")]
+                if row["dataset"] in performance_metrics
+                else None
+            ),
+            axis=1,
+        )
+        * 100
+    )
     return df[["dataset", "performance"]].groupby("dataset").mean().reset_index()
+
 
 def static_selection_table():
 
@@ -142,7 +174,7 @@ def static_selection_table():
     base["c"] = "base"
     df = pd.concat([df, base], ignore_index=True)
     df = df.pivot(index="c", columns="dataset", values=["performance", "performance_sem"])
-    
+
     values = df["performance"]
     values_sem = df["performance_sem"]
     values = values.applymap(lambda x: f"{x:.2f}" if pd.notnull(x) else "N/A")
@@ -151,6 +183,7 @@ def static_selection_table():
     # add pretty names
     df.columns = [f"{pretty_names[col]}" for col in df.columns]
     st.write(df)
+
 
 def static_optimal_table():
 
@@ -164,38 +197,149 @@ def static_optimal_table():
             df[col] /= 1e15
         if "energy" in col:
             # kJ
-            df[col] /= 1e3 
-    
-    acceptable_performance_degradation = 3
+            df[col] /= 1e3
+
+    acceptable_performance_degradation = 3  # percent
     for dataset in df["dataset"].unique():
         for metric in ["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]:
             base_value = df.loc[(df["dataset"] == dataset) & (df["c"] == 1), metric].values[0]
-            df.loc[df["dataset"] == dataset, f"{metric}_reduction"] = base_value - df.loc[df["dataset"] == dataset, metric]
+            # Compute relative reduction in percent
+            df.loc[df["dataset"] == dataset, f"{metric}_reduction (%)"] = (
+                (base_value - df.loc[df["dataset"] == dataset, metric]) / base_value * 100
+            )
             if metric == "performance":
-                df.loc[df["dataset"] == dataset, "acceptable"] = df.loc[df["dataset"] == dataset, "performance"] >= (base_value - acceptable_performance_degradation)
-
+                df.loc[df["dataset"] == dataset, "acceptable"] = (
+                    df.loc[df["dataset"] == dataset, "performance_reduction (%)"] <= acceptable_performance_degradation
+                )
 
     for dataset in df["dataset"].unique():
         # get maximal c with acceptable performance
         max_c = df.loc[(df["dataset"] == dataset) & (df["acceptable"]), "c"].max()
         # drop all with x != max_c
         df = df[~((df["dataset"] == dataset) & (df["c"] != max_c))]
-    
 
     # pivot the table, rows should be the metrics: train_energy_mean, train_time_mean, total_flops_mean, performance and reduction: train_energy_reduction, train_time_reduction, total_flops_reduction and c
     # columns should be the datasets
     df = df.melt(
         id_vars=["dataset"],
-        value_vars=["train_energy_mean", "train_time_mean", "total_flops_mean", "performance", 
-                    "train_energy_mean_reduction", "train_time_mean_reduction", "total_flops_mean_reduction", "c"],
+        value_vars=[
+            "train_energy_mean",
+            "train_time_mean",
+            "total_flops_mean",
+            "train_energy_sem",
+            "train_time_sem",
+            "performance",
+            "performance_sem",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean_reduction (%)",
+            "total_flops_mean_reduction (%)",
+            "c",
+        ],
         var_name="metric",
-        value_name="value"
+        value_name="value",
     )
-    df = df.pivot_table(
-        index=["metric"],
-        columns="dataset",
-        values="value",
-        aggfunc='first'
+    df = df.pivot_table(index=["metric"], columns="dataset", values="value", aggfunc="first")
+    df = df.rename(columns={col: pretty_names[col] for col in df.columns})
+    for i, row in df.iterrows():
+        if "_sem" in row.name:
+            sem_vals = row.values
+            value_row_name = (
+                row.name.replace("_sem", "_mean") if not "performance" in row.name else row.name.replace("_sem", "")
+            )
+            if value_row_name in df.index:
+                value_vals = df.loc[df.index == value_row_name].values[0]
+                df.loc[df.index == value_row_name] = [
+                    f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+                    for value, sem in zip(value_vals, sem_vals)
+                ]
+        else:
+            df.loc[i] = [f"{value:.2f}" if pd.notnull(value) else "N/A" for value in row.values]
+    df = df[~df.index.str.endswith("_sem")]
+    st.write(df)
+
+
+def stochastic_table():
+
+    df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
+    base = get_base_model_performance(df)
+
+    df = get_base_table(df, add_cols=["savings"])
+    base["savings"] = "base"
+    df = pd.concat([df, base], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["c"] = 17 - fl["nlayer"]
+    fl = fl[fl["c"] == 1]
+    fl["savings"] = "full LoRA"
+    df = pd.concat([df, fl], ignore_index=True)
+
+    for col in df.columns:
+        if "flops" in col:
+            # pFLOPs
+            df[col] /= 1e15
+        if "energy" in col:
+            # kJ
+            df[col] /= 1e3
+
+    for dataset in df["dataset"].unique():
+        for metric in ["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]:
+            base_value = df.loc[(df["dataset"] == dataset) & (df["savings"] == "full LoRA"), metric].values[0]
+            df.loc[df["dataset"] == dataset, f"{metric}_reduction (%)"] = (
+                (base_value - df.loc[df["dataset"] == dataset, metric]) / base_value * 100
+            )
+
+    df = df[df["savings"].isin([0.25])]
+
+    df = df.melt(
+        id_vars=["dataset"],
+        value_vars=[
+            "train_energy_mean",
+            "train_time_mean",
+            "total_flops_mean",
+            "train_energy_sem",
+            "train_time_sem",
+            "performance",
+            "performance_sem",
+            "performance_reduction (%)",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean_reduction (%)",
+            "total_flops_mean_reduction (%)",
+            "savings",
+        ],
+        var_name="metric",
+        value_name="value",
+    )
+    df = df.pivot_table(index=["metric"], columns="dataset", values="value", aggfunc="first")
+    df = df.rename(columns={col: pretty_names[col] for col in df.columns})
+    for i, row in df.iterrows():
+        if "_sem" in row.name:
+            sem_vals = row.values
+            value_row_name = (
+                row.name.replace("_sem", "_mean") if not "performance" in row.name else row.name.replace("_sem", "")
+            )
+            if value_row_name in df.index:
+                value_vals = df.loc[df.index == value_row_name].values[0]
+                df.loc[df.index == value_row_name] = [
+                    f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+                    for value, sem in zip(value_vals, sem_vals)
+                ]
+        else:
+            df.loc[i] = [f"{value:.2f}" if pd.notnull(value) else "N/A" for value in row.values]
+    df = df[~df.index.str.endswith("_sem")]
+    df = df.rename(index={"savings": "rho"})
+    df = df.reindex(
+        [
+            "rho",
+            "performance",
+            "performance_reduction (%)",
+            "total_flops_mean",
+            "total_flops_mean_reduction (%)",
+            "train_energy_mean",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean",
+            "train_time_mean_reduction (%)",
+        ]
     )
     st.write(df)
 
@@ -213,3 +357,5 @@ if __name__ == "__main__":
     static_selection_table()
     st.write("---")
     static_optimal_table()
+    st.write("---")
+    stochastic_table()

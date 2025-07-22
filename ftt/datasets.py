@@ -247,6 +247,9 @@ class GlueDatasets(CausalLMDataset):
         self["train"] = DataSplit.from_iterable(ds["train"].select(range(self.train_set_size)))
         self["validation"] = DataSplit.from_iterable(ds["validation"])
 
+        if "mismatched" in self.task_name:
+            del self["train"]
+
     def build_chat(self, example: Dict[str, Any], split_name: str) -> LMConversation:
         """
         Build a chat from a GLUE example for a given split.

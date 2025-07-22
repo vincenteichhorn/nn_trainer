@@ -2,6 +2,8 @@ from datetime import datetime
 from itertools import islice
 import json
 import os
+import socket
+import subprocess
 from typing import Any, Dict, Tuple, Iterable
 import plotly.express as px
 
@@ -119,3 +121,48 @@ def flatten_dict(d: dict, parent_key: str = "", sep: str = "_") -> Dict[str, Any
         else:
             items[new_key] = v
     return items
+
+
+def get_gpu_signatures():
+    try:
+        # Query GPU name and total memory (in MiB, no units, no headers)
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+
+        lines = result.stdout.strip().split("\n")
+        signatures = []
+
+        for line in lines:
+            name, mem = [item.strip() for item in line.split(",")]
+            mem_gb = round(int(mem) / 1024)  # Convert MiB to GB (roughly)
+            # Example: "NVIDIA A40" -> "NVIDIA-A40-46G"
+            name_clean = name.replace(" ", "-")
+            signature = f"{name_clean}-{mem_gb}G"
+            signatures.append(signature)
+
+        return signatures
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e.stderr}")
+        return None
+
+
+def get_hostname():
+    return socket.gethostname()
+
+
+def get_hardware_signature():
+    """
+    Get a unique hardware signature based on GPU and hostname.
+    Returns:
+        str: A string representing the hardware signature.
+    """
+    gpu_signatures = get_gpu_signatures()
+    hostname = get_hostname()
+    if gpu_signatures:
+        return f"{hostname}@{'-'.join(gpu_signatures)}"
+    return hostname

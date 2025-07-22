@@ -19,22 +19,22 @@ pareto_front = pd.DataFrame(
 )
 
 exp_names = [
-    "glue_cola",
-    "glue_mrpc",
+    # "glue_cola",
+    # "glue_mrpc",
     "glue_qnli",
     # "glue_mnli_mismatched",
     "glue_qqp",
     "glue_rte",
     "glue_sst2",
-    "glue_mnli_matched",
+    # "glue_mnli_matched",
     "arc_easy",
     "arc_challenge",
-    "piqa",
+    # "piqa",
     "boolq",
-    "hellaswag",
-    "alpaca_mmlu",
-    "allenai_task288_gigaword_summarization",
-    "allenai_task219_rocstories_title_answer_generation",
+    # "hellaswag",
+    # "alpaca_mmlu",
+    # "allenai_task288_gigaword_summarization",
+    # "allenai_task219_rocstories_title_answer_generation",
 ]
 
 selected_energy_metric = st.selectbox(
@@ -260,7 +260,7 @@ def add_to_pareto_front(
                     x=[dot["x"]],
                     y=[dot["y"]],
                     mode="markers+text",
-                    text=[dot["annotation"]],
+                    text=[dot["annotation"]],  # if not dot["is_dominated"] else [""],
                     textposition="top center",
                     textfont=dict(size=10, color=dot["color"]),
                     name=f"{dot['dataset']} {dot['annotation']} data point",
@@ -439,35 +439,35 @@ def plt(st_obj: st = st):
         ADPT_DIR = os.path.join(OUT_DIR, "adaptive/")
         adpt_df = pd.read_csv(os.path.join(ADPT_DIR, "results.csv"))
         adpt_df = compute_energy_savings(adpt_df, baselines, baselines_sems)
-        det_df = adpt_df[adpt_df["approach"] == "deterministic"]
-        annotation_cols = {exp: "rho" for exp in exp_names}
-        fig = add_to_pareto_front(
-            fig,
-            exp_names,
-            det_df,
-            x_axis_metrics,
-            y_axis_metrics,
-            x_axis_sem_metrics,
-            y_axis_sem_metrics,
-            annotation_cols,
-            color="orange",
-            legend_group="Adaptive (Deterministic) (rho)",
-        )
-        stoch_df = adpt_df[adpt_df["approach"] == "stochastic"]
-        stoch_df["annotation"] = ""
-        annotation_cols = {exp: "annotation" for exp in exp_names}
-        fig = add_to_pareto_front(
-            fig,
-            exp_names,
-            stoch_df,
-            x_axis_metrics,
-            y_axis_metrics,
-            x_axis_sem_metrics,
-            y_axis_sem_metrics,
-            annotation_cols,
-            color="purple",
-            legend_group="Adaptive (Stochastic)",
-        )
+        # det_df = adpt_df[adpt_df["approach"] == "deterministic"]
+        # annotation_cols = {exp: "rho" for exp in exp_names}
+        # fig = add_to_pareto_front(
+        #     fig,
+        #     exp_names,
+        #     det_df,
+        #     x_axis_metrics,
+        #     y_axis_metrics,
+        #     x_axis_sem_metrics,
+        #     y_axis_sem_metrics,
+        #     annotation_cols,
+        #     color="orange",
+        #     legend_group="Adaptive (Deterministic) (rho)",
+        # )
+        # stoch_df = adpt_df[adpt_df["approach"] == "stochastic"]
+        # stoch_df["annotation"] = ""
+        # annotation_cols = {exp: "annotation" for exp in exp_names}
+        # fig = add_to_pareto_front(
+        #     fig,
+        #     exp_names,
+        #     stoch_df,
+        #     x_axis_metrics,
+        #     y_axis_metrics,
+        #     x_axis_sem_metrics,
+        #     y_axis_sem_metrics,
+        #     annotation_cols,
+        #     color="purple",
+        #     legend_group="Adaptive (Stochastic)",
+        # )
     except FileNotFoundError:
         pass
 
@@ -475,7 +475,7 @@ def plt(st_obj: st = st):
         BAN_DIR = os.path.join(OUT_DIR, "bandits/")
         ban_df = pd.read_csv(os.path.join(BAN_DIR, "results.csv"))
         ban_df = compute_energy_savings(ban_df, baselines, baselines_sems)
-        dlinucb_df = ban_df[ban_df["bandit"] == "dUCB"]
+        dlinucb_df = ban_df[ban_df["bandit"] == "dLinUCB"]
         dlinucb_df["annotation"] = (
             dlinucb_df["gamma"].astype(str)
             + "-"
@@ -498,21 +498,21 @@ def plt(st_obj: st = st):
             color="magenta",
             legend_group="dLinUCB Bandit (gamma-lambda-delta-sigma)",
         )
-        bayesian_df = ban_df[ban_df["bandit"] == "Bayesian"]
-        bayesian_df["annotation"] = bayesian_df["alpha"].astype(str) + "-" + bayesian_df["beta"].astype(str)
-        annotation_cols = {exp: "annotation" for exp in exp_names}
-        fig = add_to_pareto_front(
-            fig,
-            exp_names,
-            bayesian_df,
-            x_axis_metrics,
-            y_axis_metrics,
-            x_axis_sem_metrics,
-            y_axis_sem_metrics,
-            annotation_cols,
-            color="cyan",
-            legend_group="Bayesian Bandit (alpha-beta)",
-        )
+        # bayesian_df = ban_df[ban_df["bandit"] == "Bayesian"]
+        # bayesian_df["annotation"] = bayesian_df["alpha"].astype(str) + "-" + bayesian_df["beta"].astype(str)
+        # annotation_cols = {exp: "annotation" for exp in exp_names}
+        # fig = add_to_pareto_front(
+        #     fig,
+        #     exp_names,
+        #     bayesian_df,
+        #     x_axis_metrics,
+        #     y_axis_metrics,
+        #     x_axis_sem_metrics,
+        #     y_axis_sem_metrics,
+        #     annotation_cols,
+        #     color="cyan",
+        #     legend_group="Bayesian Bandit (alpha-beta)",
+        # )
     except FileNotFoundError:
         pass
 

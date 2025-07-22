@@ -1,3 +1,4 @@
+import os
 import random
 from typing import TYPE_CHECKING, Callable, Dict, Any
 
@@ -5,6 +6,7 @@ import numpy as np
 import torch
 from ftt.lora import LoRALayer
 from nnt.callbacks.trainer_callback import TrainerCallback
+from nnt.util.fast_csv import FastCSV
 
 if TYPE_CHECKING:
     from nnt.trainer import Trainer
@@ -22,7 +24,7 @@ class StochasticLoRACallback(TrainerCallback):
         num_total_layers: int,
         random_seed: int = 42,
         savings: float = 0.5,
-        concentration: float = 5,
+        concentration: float = 2,
     ):
         """
         Args:
@@ -36,6 +38,7 @@ class StochasticLoRACallback(TrainerCallback):
         self.k = concentration
         self.alpha = self.savings * self.k
         self.beta = (1 - self.savings) * self.k
+        print(f"Using beta distribution with alpha={self.alpha}, beta={self.beta}")
         self.num_total_layers = num_total_layers
         self.layer_id_parse_rule = layer_id_parse_rule
         random.seed(random_seed)

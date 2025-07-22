@@ -11,6 +11,7 @@ SCRIPT_ON_HOST=$2
 TIME_LIMIT=$3
 NODELIST=$4
 SCRIPT_ARGS=$5
+PARTITION=$6
 MAX_RERUNS=250
 CURR_RERUN=0
 
@@ -18,6 +19,11 @@ CURR_RERUN=0
 if [[ ! -f "$SCRIPT_ON_HOST" ]]; then
   echo "❌ Error: Provided script does not exist on host: $SCRIPT_ON_HOST"
   exit 1
+fi
+
+# default partition if not provided
+if [[ -z "$PARTITION" ]]; then
+  PARTITION="aisc"
 fi
 
 JOB_UUID=$(uuidgen)
@@ -43,7 +49,6 @@ FULL_IMAGE="ghcr.io/$IMAGE"
 SQSH_FILE="$(basename $IMAGE)+$TAG.sqsh"
 CONTAINER_NAME="$(basename $IMAGE)+$TAG.container"
 USE_GROUP_SHARE=true
-PARTITION="aisc"
 export USE_GROUP_SHARE
 
 sbatch <<EOT

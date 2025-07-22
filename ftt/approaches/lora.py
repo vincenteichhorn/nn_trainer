@@ -17,6 +17,7 @@ from nnt.collators.causal_lm_data_collators import DataCollatorForCausalLM
 from nnt.experiment import Experiment, ExperimentConfig, experiment_config_cli
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
 from nnt.trainer import Trainer
+from nnt.util.functions import get_hardware_signature
 from nnt.validation_metrics.classification_metrics import OneHotClassificationMetrics
 from nnt.validation_metrics.generation_metrics import BleuScore, MeteorScore, NistScore, RougeScore
 from nnt.validators.forward_validator import ForwardValidator
@@ -101,6 +102,16 @@ class LoRAExperiment(Experiment):
         """
         return os.path.join(self.config.output_dir, self.config.dataset_name, str(repid))
 
+    def write_hardware_signature(self, output_dir: str):
+        """
+        Write the hardware signature to the output directory.
+        This method can be overridden by subclasses if needed.
+        """
+        hardware_signature = get_hardware_signature()
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, "hardware_signature"), "w") as f:
+            f.write(hardware_signature)
+
     def run(self):
         """
         Run the static approach using the provided configuration.
@@ -109,6 +120,7 @@ class LoRAExperiment(Experiment):
         for repid in range(self.config.num_repetitions):
             model, tokenizer = self.load_model_and_tokenizer()
             output_dir = self.get_repetition_output_dir(repid)
+            self.write_hardware_signature(output_dir)
             done_file = f"{output_dir}/donefile"
             if self.config.watch_done_file and os.path.exists(done_file):
                 print(f"Skipping repetition {repid} as done file exists: {done_file}")

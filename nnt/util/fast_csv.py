@@ -1,5 +1,8 @@
 import os
+from typing import Any
 import warnings
+
+import numpy as np
 
 
 class FastCSV:
@@ -46,6 +49,25 @@ class FastCSV:
             with open(self.file_path, "w") as f:
                 f.write(",".join(columns) + "\n")
 
+    def _to_str(self, content: Any) -> str:
+        """
+        Write content to the CSV file.
+
+        Args:
+            content (Any): Content to write to the file.
+        Returns:
+            str: The content written to the file.
+        """
+        if (
+            isinstance(content, list)
+            or isinstance(content, tuple)
+            or isinstance(content, dict)
+            or isinstance(content, set)
+            or isinstance(content, np.ndarray)
+        ):
+            return f'"{str(content)}"'
+        return str(content)
+
     def append(self, row: dict) -> None:
         """
         Append a row to the CSV file. The row must contain all columns.
@@ -57,4 +79,4 @@ class FastCSV:
         """
         assert all(key in row for key in self.columns), "Row must contain all columns"
         with open(self.file_path, "a") as f:
-            f.write(",".join(str(v) for v in row.values()) + "\n")
+            f.write(",".join(self._to_str(v) for v in row.values()) + "\n")

@@ -8,21 +8,18 @@ import pandas as pd
 
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
 from nnt.util.monitor import Monitor
+import re
 
 
-def mask_brackets_in_csv(path: str) -> str:
-    """
-    Reads a CSV file and wraps each '[' with '"[', and each ']' with ']"'
-    to protect list-like content from being split on commas.
-    Returns the modified CSV data as a single string.
-    """
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Replace all '[' and ']' at once
-    content = content.replace("[", '"[').replace("]", ']"')
-
-    return content
+correction = {
+    "mapping": {"gx29@NVIDIA-A40-45G": 0, "gx02@NVIDIA-A100-SXM4-80GB-80G": 0},
+    "correction": {
+        0: {
+            "time": lambda x: x,
+            "energy": lambda x: x,
+        },
+    },
+}
 
 
 def try_float(inp):
@@ -36,6 +33,42 @@ def try_float(inp):
         return None
 
 
+def mask_brackets_in_csv(path: str) -> str:
+    """
+    Reads a CSV file and wraps each '[' with '"[', and each ']' with ']"'
+    to protect list-like content from being split on commas.
+    Returns the modified CSV data as a single string.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Replace all '[' and ']' at once
+    # Only replace [ if not already preceded by a quote, and ] if not already followed by a quote
+    content = re.sub(r'(?<!")\[', '"[', content)
+    content = re.sub(r'\](?!")', ']"', content)
+
+    return content
+
+
+def get_csv_data(path: str) -> pd.DataFrame:
+
+    file_name = os.path.basename(path)
+    file_to_open = path
+    if "validation" in file_name:
+        if os.path.exists(os.path.join(os.path.dirname(path), "re_validation_log.csv")):
+            file_to_open = os.path.join(os.path.dirname(path), "re_validation_log.csv")
+
+    if os.path.exists(os.path.join(os.path.dirname(path), file_name.replace(".csv", "_fixed.csv"))):
+        file_to_open = os.path.join(os.path.dirname(path), file_name.replace(".csv", "_fixed.csv"))
+
+    # if not "_fixed" in file_to_open:
+    #     content = mask_brackets_in_csv(file_to_open)
+    #     df = pd.read_csv(io.StringIO(content), quotechar='"')
+    # else:
+    df = pd.read_csv(file_to_open)
+    return df, file_to_open
+
+
 def get_run_result(run_folder: str) -> Dict[str, float]:
 
     results = {}
@@ -43,8 +76,7 @@ def get_run_result(run_folder: str) -> Dict[str, float]:
     if not os.path.exists(donefile_path):
         return results
 
-    validation_log_path = os.path.join(run_folder, "validation_log.csv")
-    validation_df = pd.read_csv(io.StringIO(mask_brackets_in_csv(validation_log_path)), quotechar='"')
+    validation_df, _ = get_csv_data(os.path.join(run_folder, "validation_log.csv"))
     for col in validation_df.columns:
         if col in ["timestamp", "learning_rate"]:
             continue
@@ -53,16 +85,23 @@ def get_run_result(run_folder: str) -> Dict[str, float]:
         results[f"{col}_max"] = try_float(max_val)
         results[f"{col}_min"] = try_float(min_val)
 
-    energy_log_path = os.path.join(run_folder, "energy_log.csv")
+    hardware_signature = "unknown"
+    if os.path.exists(os.path.join(run_folder, "hardware_signature")):
+        with open(os.path.join(run_folder, "hardware_signature"), "r") as f:
+            hardware_signature = f.read().strip()
+        assert hardware_signature != "unknown"
+    energy_correction = correction["correction"][correction["mapping"].get(hardware_signature, 0)]["energy"]
+    time_correction = correction["correction"][correction["mapping"].get(hardware_signature, 0)]["time"]
+    _, energy_log_path = get_csv_data(os.path.join(run_folder, "energy_log.csv"))
     energy_prof = NvidiaProfiler.from_cache(energy_log_path)
-    results["train_energy"] = float(energy_prof.get_total_energy(record_steps=["step_begin"]))
-    results["total_energy"] = float(energy_prof.get_total_energy())
-    results["train_time"] = float(energy_prof.get_total_time(record_steps=["step_begin"]))
-    results["total_time"] = float(energy_prof.get_total_time())
+    results["train_energy"] = energy_correction(float(energy_prof.get_total_energy(record_steps=["step_begin"])))
+    results["total_energy"] = energy_correction(float(energy_prof.get_total_energy()))
+    results["train_time"] = time_correction(float(energy_prof.get_total_time(record_steps=["step_begin"])))
+    results["total_time"] = time_correction(float(energy_prof.get_total_time()))
 
     flops_budget_log_path = os.path.join(run_folder, "flops_budget_log.csv")
     if os.path.exists(flops_budget_log_path):
-        flops_budget_df = pd.read_csv(flops_budget_log_path)
+        flops_budget_df, _ = get_csv_data(flops_budget_log_path)
         results["total_flops"] = float(flops_budget_df["cumulative_flops"].max())
     return results
 

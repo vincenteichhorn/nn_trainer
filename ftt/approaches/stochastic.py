@@ -30,7 +30,7 @@ class StochasticApproachConfig(LoRAExperimentConfig):
     """
 
     savings: float = 0.5
-    concentration: float = 5
+    concentration: float = 2
 
 
 class StochasticApproach(LoRAExperiment):
@@ -66,6 +66,7 @@ class StochasticApproach(LoRAExperiment):
                 layer_id_parse_rule=layer_parse_rule,
                 num_total_layers=num_total_layers,
                 savings=self.config.savings,
+                concentration=self.config.concentration,
                 random_seed=rep_id * int(100 * self.config.savings) + 42,
             )
         ]
