@@ -59,8 +59,9 @@ class AdaptiveApproach(LoRAExperiment):
         Returns:
             List[TrainerCallback]: A list of additional callbacks.
         """
+        model = kwargs.get("model")
         layer_parse_rule = lambda name: (int(name.split(".")[3]) if len(name.split(".")) > 3 else 0)  # noqa: E731
-        num_total_layers = max(layer_parse_rule(name) for name, _ in self.model.named_modules()) + 1
+        num_total_layers = max(layer_parse_rule(name) for name, _ in model.named_modules()) + 1
         return [
             AdaptiveLoRACallback(
                 num_total_layers=num_total_layers,

@@ -1,13 +1,13 @@
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    mnli \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx01 \
-    "--epochs 1 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_mnli_matched --validation forward" \
-    gpu
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     mnli \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx01 \
+#     "--epochs 1 --learning_rate 1e-5 --train_batch_size 16 --eval_batch_size 16 --dataset_name glue_mnli_matched --validation forward" \
+#     gpu
 
-sleep 5
+# sleep 5
 
 
 
@@ -37,27 +37,27 @@ sleep 5
 
 
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    qnli \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx27 \
-    "--epochs 1 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name glue_qnli --validation forward" \
-    gpu
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     qnli \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx27 \
+#     "--epochs 1 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name glue_qnli --validation forward" \
+#     gpu
 
-sleep 5
+# sleep 5
 
 
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    qqp \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx27 \
-    "--epochs 1 --learning_rate 1e-5 --train_batch_size 8 --eval_batch_size 8 --dataset_name glue_qqp --validation forward" \
-    gpu
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     qqp \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx27 \
+#     "--epochs 1 --learning_rate 1e-5 --train_batch_size 8 --eval_batch_size 8 --dataset_name glue_qqp --validation forward" \
+#     gpu
 
-sleep 5
+# sleep 5
 
 
 bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
@@ -84,28 +84,28 @@ sleep 5
 
 
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    arc_easy \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx25 \
-    "--epochs 1 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name arc_easy --validation forward" \
-    gpu
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     arc_easy \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx25 \
+#     "--epochs 1 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name arc_easy --validation forward" \
+#     gpu
 
-sleep 5
-
-
+# sleep 5
 
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    arc_challenge \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx25 \
-    "--epochs 8 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name arc_challenge --validation forward" \
-    gpu
 
-sleep 5
+
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     arc_challenge \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx25 \
+#     "--epochs 8 --learning_rate 5e-6 --train_batch_size 16 --eval_batch_size 16 --dataset_name arc_challenge --validation forward" \
+#     gpu
+
+# sleep 5
 
 
 
@@ -123,15 +123,15 @@ sleep 5
 
 
 
-bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
-    piqa \
-    /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
-    3-00:00:00 \
-    gx28 \
-    "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name piqa --validation forward" \
-    gpu
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     piqa \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/approaches/run_all.sh \
+#     3-00:00:00 \
+#     gx28 \
+#     "--epochs 3 --learning_rate 5e-6 --train_batch_size 8 --eval_batch_size 8 --dataset_name piqa --validation forward" \
+#     gpu
 
-sleep 5
+# sleep 5
 
 
 

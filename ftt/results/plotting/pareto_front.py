@@ -19,22 +19,22 @@ pareto_front = pd.DataFrame(
 )
 
 exp_names = [
-    # "glue_cola",
-    # "glue_mrpc",
+    "glue_cola",
+    "glue_mrpc",
     "glue_qnli",
     # "glue_mnli_mismatched",
     "glue_qqp",
     "glue_rte",
     "glue_sst2",
-    # "glue_mnli_matched",
+    "glue_mnli_matched",
     "arc_easy",
     "arc_challenge",
-    # "piqa",
+    "piqa",
     "boolq",
     # "hellaswag",
     # "alpaca_mmlu",
     # "allenai_task288_gigaword_summarization",
-    # "allenai_task219_rocstories_title_answer_generation",
+    "allenai_task219_rocstories_title_answer_generation",
 ]
 
 selected_energy_metric = st.selectbox(

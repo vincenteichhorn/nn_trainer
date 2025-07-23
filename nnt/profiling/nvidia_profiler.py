@@ -1,10 +1,13 @@
 import os
+import random
 import signal
 import subprocess
+import time
 import warnings
 from datetime import datetime
-from typing import List, Tuple, Any
+from typing import List, Literal, Tuple, Any
 
+import pynvml
 import torch
 import pandas as pd
 from multiprocessing import Process, Value, Event
@@ -45,18 +48,21 @@ class NvidiaProfiler(Profiler):
         force_cache: bool = False,
         gpu_clock_speed: int | None = None,
         read_only: bool = False,
+        backend: Literal["pynvml", "nvidia-smi"] = "pynvml",
     ):
         """
         Initialize the NvidiaProfiler.
 
         Args:
             interval (int): Interval in milliseconds for profiler steps.
-            cache_file (str or None): File path to store profiling data in a CSV file.
-            force_cache (bool): If True, overwrite the cache file if it exists.
-            gpu_clock_speed (int or None): Set GPU clock speed in MHz (optional).
-            read_only (bool): If True, only read data from cache file, do not start profiling process.
+            chache_file (str, optional): Path to cache file for storing results.
+            force_cache (bool): If True, overwrite existing cache file.
+            gpu_clock_speed (int, optional): Set GPU clock speed in MHz to reduce variance (default is None, clock speed is not changed).
+            read_only (bool): If True, do not start the profiling process, only load data from cache.
+            backend (Literal["pynvml", "nvidia-smi"]): Backend to use for profiling. Defaults to "pynvml".
         """
         self.interval: float = interval
+        self.backend: Literal["pynvml", "nvidia-smi"] = backend
         self.data: List[Tuple[int, datetime, float]] = []
         self.should_profiling_run: Value = Value("i", 1)  # type: ignore
         self.profiling_started: Event = Event()  # type: ignore
@@ -76,6 +82,7 @@ class NvidiaProfiler(Profiler):
                 self.profiling_stopped,
                 self.result_handler,
                 self.interval,
+                self.backend,
             ),
         )
         self.gpu_clock_speed = gpu_clock_speed
@@ -146,9 +153,10 @@ class NvidiaProfiler(Profiler):
         stopped: Event,  # type: ignore
         result_handler: ResultHandler,
         interval: int,
+        backend: Literal["pynvml", "nvidia-smi"] = "pynvml",
     ) -> None:
         """
-        Static method for the separate profiling process. Opens a subprocess with nvidia-smi and saves GPU ID, timestamp, power, and memory for every interval.
+        Static method for the separate profiling process. Opens a subprocess with nvidia-smi/pynvml and saves GPU ID, timestamp, power, and memory for every interval.
 
         Args:
             should_run (multiprocessing.Value): Set to 1 to run, 0 to stop profiling.
@@ -156,42 +164,69 @@ class NvidiaProfiler(Profiler):
             stopped (multiprocessing.Event): Notifies when profiling ends.
             result_handler (ResultHandler): Handles shared memory for results.
             interval (int): Interval in milliseconds for nvidia-smi polling.
+            backend (Literal["pynvml", "nvidia-smi"]): Backend to use for profiling. Defaults to "pynvml".
         """
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        def read_data(ln):
-            try:
-                vals: List[Any] = ln.strip().split(", ")
-                gid: int = int(vals[0])
-                ts: datetime = datetime.strptime(vals[1], "%Y/%m/%d %H:%M:%S.%f")
-                pwr: float = float(vals[2].split(" ")[0])
-                mem: float = float(vals[3].split(" ")[0])
-                return (gid, ts, pwr, mem, "__unset__")
-            except ValueError as e:
-                warnings.warn(f"Error parsing line '{ln.strip()}':\n{e}")
-                return None
+        if backend == "pynvml":
+            pynvml.nvmlInit()
 
-        with (
-            subprocess.Popen(
-                ["nvidia-smi", "--query-gpu=index,timestamp,power.draw,memory.used", "--format=csv", f"-lms={interval}"],
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid,
-            ) as nvidiasmi_process,
-            result_handler as result,
-        ):
-            with nvidiasmi_process.stdout as out:
-                _ = out.readline()
+            with result_handler as result:
                 if should_run.value:
                     started.set()
                 while should_run.value:
-                    data = read_data(out.readline())
-                    if data is None:
-                        continue
-                    result.put(data)
-        result.put(None)
-        stopped.set()
+                    try:
+                        for gpu_id in range(pynvml.nvmlDeviceGetCount()):
+                            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+                            timestamp = datetime.now()
+                            power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
+                            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                            memory_used = memory_info.used / (1024 * 1024)
+                            result.put((gpu_id, timestamp, power, memory_used, "__unset__"))
+                    except pynvml.NVMLError as e:
+                        warnings.warn(f"Error in pynvml profiling: {e}")
+                    time.sleep(interval / 1000.0)
+                result.put(None)
+                stopped.set()
+
+        elif backend == "nvidia-smi":
+
+            def read_data_nvidia_smi(ln):
+                try:
+                    vals: List[Any] = ln.strip().split(", ")
+                    gid: int = int(vals[0])
+                    ts: datetime = datetime.strptime(vals[1], "%Y/%m/%d %H:%M:%S.%f")
+                    pwr: float = float(vals[2].split(" ")[0])
+                    mem: float = float(vals[3].split(" ")[0])
+                    return (gid, ts, pwr, mem, "__unset__")
+                except ValueError as e:
+                    warnings.warn(f"Error parsing line '{ln.strip()}':\n{e}")
+                    return None
+
+            with (
+                subprocess.Popen(
+                    ["nvidia-smi", "--query-gpu=index,timestamp,power.draw,memory.used", "--format=csv", f"-lms={interval}"],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    preexec_fn=os.setsid,
+                ) as nvidiasmi_process,
+                result_handler as result,
+            ):
+                with nvidiasmi_process.stdout as out:
+                    _ = out.readline()
+                    if should_run.value:
+                        started.set()
+                    while should_run.value:
+                        data = read_data_nvidia_smi(out.readline())
+                        if data is None:
+                            continue
+                        result.put(data)
+                result.put(None)
+                stopped.set()
+        else:
+            raise ValueError(f"Unknown backend '{backend}'. Use 'pynvml' or 'nvidia-smi'.")
+
         nvidiasmi_process.terminate()
         try:
             nvidiasmi_process.wait(timeout=5)
@@ -205,7 +240,21 @@ class NvidiaProfiler(Profiler):
         Returns:
             NvidiaProfiler: The profiler instance.
         """
-        assert subprocess.getstatusoutput("nvidia-smi")[0] == 0, "Could not find nvidia-smi tool"
+        if self.backend == "pynvml":
+            pynvml.nvmlInit()
+            if torch.cuda.device_count() == 0:
+                raise RuntimeError(
+                    "No CUDA devices found. Ensure you have a compatible NVIDIA GPU and PyTorch installed with CUDA support."
+                )
+        elif self.backend == "nvidia-smi":
+            for _ in range(10):
+                if subprocess.getstatusoutput("nvidia-smi")[0] == 0:
+                    break
+                warnings.warn("nvidia-smi not found, retrying in 1 second...")
+                time.sleep(random.uniform(0, 1))
+            assert subprocess.getstatusoutput("nvidia-smi")[0] == 0, "Could not find nvidia-smi tool"
+        else:
+            raise ValueError(f"Unknown backend '{self.backend}'. Use 'pynvml' or 'nvidia-smi'.")
         self.process.start()
         self.profiling_started.wait()
         return self

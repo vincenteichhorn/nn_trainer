@@ -1,3 +1,4 @@
+import time
 import pytest
 from datetime import datetime
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
@@ -97,3 +98,44 @@ def test_from_cache(monkeypatch, dummy_data):
     monkeypatch.setattr("nnt.profiling.nvidia_profiler.FileCacheResultHandler", lambda *a, **kw: DummyResultHandler())
     prof = NvidiaProfiler.from_cache("dummy.csv")
     assert prof.data == dummy_data
+
+
+def test_run_profiler():
+    chache_file = "./tests/nvidia_profiler_test.csv"
+    with NvidiaProfiler(cache_file=chache_file, force_cache=True, interval=10) as profiler:
+
+        time.sleep(2)
+        profiler.record_step("step1")
+        time.sleep(2)
+        profiler.record_step("step2")
+
+    total_energy = profiler.get_total_energy()
+    total_time = profiler.get_total_time()
+
+    step1_energy = profiler.get_total_energy(record_steps=["step1"])
+    step1_time = profiler.get_total_time(record_steps=["step1"])
+
+    print(f"Total Energy: {total_energy} J")
+    print(f"Total Time: {total_time} s")
+    print(f"Step 1 Energy: {step1_energy} J")
+    print(f"Step 2 Time: {step1_time} s")
+
+    assert total_energy > 0
+    assert total_time > 0
+    assert step1_energy > 0
+    assert step1_time > 0
+
+    profiler = NvidiaProfiler.from_cache(chache_file)
+    assert profiler.get_total_energy() == total_energy
+    assert profiler.get_total_time() == total_time
+    assert profiler.get_total_energy(record_steps=["step1"]) == step1_energy
+    assert profiler.get_total_time(record_steps=["step1"]) == step1_time
+
+    import os
+
+    if os.path.exists(chache_file):
+        os.remove(chache_file)
+
+
+if __name__ == "__main__":
+    test_run_profiler()

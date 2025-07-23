@@ -58,17 +58,7 @@ class LoRAExperiment(Experiment):
         Prepare the static approach by loading the necessary components.
         This method should be implemented by subclasses.
         """
-        model, tokenizer = self.load_model_and_tokenizer()
-        self.model = model
-        self.tokenizer = tokenizer
-        self.dataset = get_dataset(self.config.dataset_name)
         self.is_dataset_prepared = False
-
-        if self.config.training_args.data_collator is None:
-            self.config.training_args.data_collator = DataCollatorForCausalLM(self.tokenizer)
-
-        if self.config.training_args.model_save_function is None:
-            self.config.training_args.model_save_function = lambda model, path: model.save_pretrained(path)
 
     def load_additional_callbacks(self, *args, **kwargs) -> List[TrainerCallback]:
         """
@@ -117,8 +107,8 @@ class LoRAExperiment(Experiment):
         Run the static approach using the provided configuration.
         This method should be implemented by subclasses.
         """
+
         for repid in range(self.config.num_repetitions):
-            model, tokenizer = self.load_model_and_tokenizer()
             output_dir = self.get_repetition_output_dir(repid)
             self.write_hardware_signature(output_dir)
             done_file = f"{output_dir}/donefile"
@@ -126,9 +116,17 @@ class LoRAExperiment(Experiment):
                 print(f"Skipping repetition {repid} as done file exists: {done_file}")
                 continue
             print(f"Running repetition {repid} with output directory: {output_dir}")
+            model, tokenizer = self.load_model_and_tokenizer()
             if not self.is_dataset_prepared:
-                self.dataset.prepare(self.tokenizer)
+                self.dataset = get_dataset(self.config.dataset_name)
+                self.dataset.prepare(tokenizer)
                 self.is_dataset_prepared = True
+
+            if self.config.training_args.data_collator is None:
+                self.config.training_args.data_collator = DataCollatorForCausalLM(tokenizer)
+
+            if self.config.training_args.model_save_function is None:
+                self.config.training_args.model_save_function = lambda model, path: model.save_pretrained(path)
 
             validator = None
             validation_arguments = ValidationArguments(
@@ -173,7 +171,7 @@ class LoRAExperiment(Experiment):
                         validate_strategy=self.config.validate_strategy,
                         validate_every=self.config.validate_every,
                     ),
-                    *self.load_additional_callbacks(rep_id=repid),
+                    *self.load_additional_callbacks(rep_id=repid, model=model, tokenizer=tokenizer),
                 ]
                 energy_callback = EnergyCallback(output_dir=output_dir, nvidia_profiler=prof)
                 if repid == 0:

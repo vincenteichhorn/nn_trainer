@@ -86,7 +86,7 @@ while true; do
     echo "Script failed with code \$EXIT_CODE. Retrying in 1 second..."
     CURR_RERUN=\$((CURR_RERUN + 1))
     if [ \$CURR_RERUN -ge $MAX_RERUNS ]; then
-      echo "Maximum reruns reached (\$MAX_RERUNS). Exiting with failure."
+      echo "Maximum reruns reached ($MAX_RERUNS). Exiting with failure."
       exit 1
     fi
     echo "Rerun \$CURR_RERUN of $MAX_RERUNS"

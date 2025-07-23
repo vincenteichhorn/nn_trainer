@@ -58,15 +58,17 @@ rc(){
     # Start the SSH server
     /usr/sbin/sshd -p ${SSH_PORT}
 
-    # Navigate to the working directory and start bash
-   echo "Executing Script: "
-   echo "$SCRIPT_IN_CONTAINER $SCRIPT_ARGS"
-   cd "${WD}"
-   $SCRIPT_IN_CONTAINER $SCRIPT_ARGS
-   RC=$?
+    nvidia-smi
 
-   echo "Script exited with code $RC"
-   echo "Write to ext code file $EXIT_CODE_FILE_CONTAINER"
-   echo $RC > ${EXIT_CODE_FILE_CONTAINER}
+    # Navigate to the working directory and start bash
+    echo "Executing Script: "
+    echo "$SCRIPT_IN_CONTAINER $SCRIPT_ARGS"
+    cd "${WD}"
+    $SCRIPT_IN_CONTAINER $SCRIPT_ARGS
+    RC=$?
+
+    echo "Script exited with code $RC"
+    echo "Write to ext code file $EXIT_CODE_FILE_CONTAINER"
+    echo $RC > ${EXIT_CODE_FILE_CONTAINER}
 
 }
