@@ -224,14 +224,13 @@ class NvidiaProfiler(Profiler):
                         result.put(data)
                 result.put(None)
                 stopped.set()
+            nvidiasmi_process.terminate()
+            try:
+                nvidiasmi_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(nvidiasmi_process.pid), signal.SIGKILL)
         else:
             raise ValueError(f"Unknown backend '{backend}'. Use 'pynvml' or 'nvidia-smi'.")
-
-        nvidiasmi_process.terminate()
-        try:
-            nvidiasmi_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            os.killpg(os.getpgid(nvidiasmi_process.pid), signal.SIGKILL)
 
     def __enter__(self) -> "NvidiaProfiler":
         """

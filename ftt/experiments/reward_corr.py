@@ -1,3 +1,4 @@
+import math
 import os
 import random
 from typing import Dict, List, Any, Callable
@@ -50,16 +51,42 @@ class StochasticLoRATestCallback(TrainerCallback):
         random.seed(random_seed)
 
         self.fast_log_writer = FastCSV(file_path=os.path.join(self.output_dir, "reward_log.csv"), force=True)
-        self.fast_log_writer.set_columns(["step", "min_layer_id", "fisher_score"])
 
-        self.marker_train_loss = None
-        self.marker_gradient_sensitivity = None
+        self.init_train_loss = None
+        self.absolute_consumed_budget = 0
 
-    def _compute_fisher_scores(self, model):
-        fisher_information = {}
-        with torch.no_grad():
-            for name, module in model.named_modules():
+        self.memorization = {
+            "min_layer_id": self.num_total_layers - 1,
+            "train_loss": None,
+            "total_relative_loss_change": None,
+            "total_relative_budget_change": None,
+            "current_relative_loss_change": None,
+            "current_relative_budget_change": None,
+        }
+        self.fast_log_writer.set_columns(["step"] + list(self.memorization.keys()))
+
+    def _update_trainable_lora_layers(self, model, min_layer_id: int):
+        """
+        Updates the requires_grad flag for LoRA layers based on the selected minimum layer ID.
+
+        Args:
+            model: Model containing LoRA layers.
+            min_layer_id (int): The minimum layer ID to consider for training.
+        """
+        for name, module in model.named_modules():
+            if isinstance(module, LoRALayer):
                 layer_id = self.layer_id_parse_rule(name)
+                if layer_id < min_layer_id:
+                    module.A.requires_grad_(False)
+                    module.B.requires_grad_(False)
+                else:
+                    module.A.requires_grad_(True)
+                    module.B.requires_grad_(True)
+
+    def _model_gradient_norm(self, model):
+        sum_squared_gradients = 0.0
+        with torch.no_grad():
+            for _, module in model.named_modules():
                 if (
                     isinstance(module, LoRALayer)
                     and module.A.requires_grad
@@ -67,14 +94,10 @@ class StochasticLoRATestCallback(TrainerCallback):
                     and module.A.grad is not None
                     and module.B.grad is not None
                 ):
-                    a_fish = (module.A.grad.data.clone().detach() ** 2).mean().to(torch.float32).cpu().numpy()
-                    b_fish = (module.B.grad.data.clone().detach() ** 2).mean().to(torch.float32).cpu().numpy()
-                    if layer_id not in fisher_information:
-                        fisher_information[layer_id] = {"A": a_fish, "B": b_fish}
-                    else:
-                        fisher_information[layer_id]["A"] += a_fish
-                        fisher_information[layer_id]["B"] += b_fish
-        return fisher_information
+                    a_norm = (module.A.grad.clone().detach() ** 2).sum().to(torch.float32).cpu().numpy()
+                    b_norm = (module.B.grad.clone().detach() ** 2).sum().to(torch.float32).cpu().numpy()
+                    sum_squared_gradients += a_norm + b_norm
+        return math.sqrt(sum_squared_gradients)
 
     def on_step_begin(self, info: Dict[str, Any], trainer: "Trainer"):
         """
@@ -85,32 +108,34 @@ class StochasticLoRATestCallback(TrainerCallback):
             trainer (Trainer): Trainer instance.
         """
         model = trainer.model
-        global_step = info["global_step"]
-        fisher_information = self._compute_fisher_scores(model)
-        fisher_sum = sum(float(el["A"]) + float(el["B"]) for el in fisher_information.values())
-        Monitor().print(f"Fisher information sum: {fisher_sum}")
+        if info["train_loss"] is None and info["global_step"] < 25:
+            return
+
+        if self.init_train_loss is None:
+            self.init_train_loss = info["train_loss"]
+
+        self.memorization["total_relative_loss_change"] = (self.init_train_loss - info["train_loss"]) / self.init_train_loss
+
+        total_budget = self.num_total_layers * info["num_train_steps"]
+        self.absolute_consumed_budget += (self.memorization["min_layer_id"] + 1) / self.num_total_layers
+        self.memorization["total_relative_budget_change"] = self.absolute_consumed_budget / total_budget
+
+        self.memorization["current_relative_budget_change"] = (
+            (self.memorization["min_layer_id"] + 1) / self.num_total_layers / total_budget
+        )
+        loss_change = (self.memorization["train_loss"] or info["train_loss"]) - info["train_loss"]
+        self.memorization["current_relative_loss_change"] = loss_change / self.init_train_loss
+
         self.fast_log_writer.append(
             {
-                "step": global_step,
-                "min_layer_id": self.current_min_layer_id,
-                "fisher_score": fisher_sum,
+                "step": info["global_step"],
+                **self.memorization,
             }
         )
 
-        min_layer_id = int(random.betavariate(self.alpha, self.beta) * self.num_total_layers)
-        self.current_min_layer_id = min_layer_id
-        for name, module in model.named_modules():
-            if isinstance(module, LoRALayer):
-                layer_id = self.layer_id_parse_rule(name)
-                if layer_id < min_layer_id and layer_id != self.num_total_layers - 1:
-                    module.A.requires_grad_(False)
-                    module.B.requires_grad_(False)
-                else:
-                    module.A.requires_grad_(True)
-                    module.B.requires_grad_(True)
-
-    def on_step_end(self, info, trainer):
-        global_step = info["global_step"]
+        self.memorization["train_loss"] = info["train_loss"]
+        self.memorization["min_layer_id"] = int(random.betavariate(self.alpha, self.beta) * self.num_total_layers)
+        self._update_trainable_lora_layers(model, self.memorization["min_layer_id"])
 
 
 class StochasticTestApproach(LoRAExperiment):
@@ -138,8 +163,9 @@ class StochasticTestApproach(LoRAExperiment):
         Returns:
             List[TrainerCallback]: A list of additional callbacks.
         """
+        model = kwargs["model"]
         layer_parse_rule = lambda name: (int(name.split(".")[3]) if len(name.split(".")) > 3 else 0)  # noqa: E731
-        num_total_layers = max(layer_parse_rule(name) for name, _ in self.model.named_modules()) + 1
+        num_total_layers = max(layer_parse_rule(name) for name, _ in model.named_modules()) + 1
         rep_id = kwargs["rep_id"] if "rep_id" in kwargs else 0
         return [
             StochasticLoRATestCallback(

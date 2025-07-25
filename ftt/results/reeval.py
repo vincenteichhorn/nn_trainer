@@ -111,7 +111,7 @@ def re_evaluate(
 
 if __name__ == "__main__":
 
-    # python3 -m ftt.results.reeval --exp_dir static/ --dataset glue_mnli_mismatched --reeval_rule "lambda x: 'mnli_mismatched' in x" --tokenizer_name meta-llama/Llama-3.2-1B --base_model meta-llama/Llama-3.2-1B
+    # python3 -m ftt.results.reeval --exp_dir green_trainer/ --dataset glue_mnli_mismatched --reeval_rule "lambda x: 'mnli_mismatched' in x" --tokenizer_name meta-llama/Llama-3.2-1B --base_model meta-llama/Llama-3.2-1B
 
     base_dir = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/out"
     parser = argparse.ArgumentParser(description="Re-evaluate checkpoints for a given experiment directory and rule.")

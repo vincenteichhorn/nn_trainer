@@ -20,6 +20,7 @@ from nnt.callbacks.validator_callback import ValidatorCallback
 from nnt.collators.causal_lm_data_collators import DataCollatorForCausalLM
 from nnt.experiment import Experiment, ExperimentConfig, experiment_config_cli
 from nnt.trainer import Trainer
+from nnt.util.fast_csv import FastCSV
 from nnt.util.monitor import Monitor
 from nnt.validation_metrics.classification_metrics import OneHotClassificationMetrics
 from nnt.validation_metrics.generation_metrics import BleuScore, MeteorScore, NistScore, RougeScore
@@ -34,53 +35,47 @@ class Bandit:
     This class defines the basic structure and methods for bandit approaches.
     """
 
-    def __init__(self, num_features: int):
-        """
-        Initialize the bandit with the number of features.
-
-        Args:
-            num_features (int): Number of features (dimension of the action space).
-        """
-        self.num_features = num_features
+    def __init__(self, num_actions: int, num_features: int):
+        pass
 
     @abstractmethod
-    def select_action(self, possible_actions: List[List[float]], budget_increase: List[float] = None) -> List[float]:
+    def select_action(self, context_vector: np.ndarray) -> int:
         """
-        Select an action based on the current features and budget.
+        Select an action based on the context vector.
 
         Args:
-            possible_actions (List[List[float]]): List of possible actions.
-            budget_increase (List[float], optional): List of budget increases for each action.
+            context_vector (np.ndarray): The context vector for action selection.
 
         Returns:
-            List[float]: Selected action.
+            int: The index of the selected action.
         """
         pass
 
     @abstractmethod
-    def update(self, action: List[float], reward: float):
+    def update(self, chosen_action: int, context_vector: np.ndarray, reward: float):
         """
-        Update the bandit state based on the selected action and received reward.
+        Update the internal parameters based on the chosen action and observed reward.
 
         Args:
-            action (List[float]): The action that was taken.
-            reward (float): The reward received for the action.
+            chosen_action (int): The index of the chosen action.
+            action_context (np.ndarray): The context vector associated with the chosen action.
+            reward (float): The observed reward for the chosen action.
         """
         pass
 
     @abstractmethod
     def reset(self):
         """
-        Reset the bandit state.
-        This method should be called to reset the bandit for a new episode or run.
+        Reset the internal state of the bandit while keeping hyperparameters.
+        This method is called at the beginning of each new training run.
         """
         pass
 
 
-class dUCBBandit:
+class dLinUCBBandit(Bandit):
     def __init__(
         self,
-        num_features: int,
+        num_actions: int,
         gamma: float = 0.75,
         lmbd: float = 0.001,
         delta: float = 0.01,
@@ -90,7 +85,6 @@ class dUCBBandit:
         verbose: bool = False,
     ):
         """
-        D-LinUCB Bandit implementation with general L.
 
         Args:
             num_features (int): Feature dimension (d).
@@ -102,9 +96,10 @@ class dUCBBandit:
             L (float): Bound on ||action||.
             verbose (bool): Enable debug logging.
         """
-        self.num_features = num_features
+        self.num_actions = num_actions
+        self.num_features = 2
         self.gamma = gamma
-        self.lmbd = lmbd
+        self.lambda_ = lmbd
         self.delta = delta
         self.sigma = sigma
         self.S = S
@@ -114,18 +109,17 @@ class dUCBBandit:
         self.t = 0
         self.gamma2_t = 1.0
 
-        self.V = self.lmbd * np.eye(self.num_features)
-        self.Ve = self.lmbd * np.eye(self.num_features)
+        self.V = self.lambda_ * np.eye(self.num_features)
+        self.Ve = self.lambda_ * np.eye(self.num_features)
         self.b = np.zeros(self.num_features)
-        self.theta_hat = np.zeros(self.num_features)
 
     def compute_beta(self):
         log_term = 2 * math.log(1.0 / self.delta) + self.num_features * math.log(
-            1.0 + (1.0 - self.gamma2_t) * (self.L**2) / (self.lmbd * self.num_features * (1.0 - self.gamma**2))
+            1.0 + (1.0 - self.gamma2_t) * (self.L**2) / (self.lambda_ * self.num_features * (1.0 - self.gamma**2))
         )
-        return np.sqrt(self.lmbd) * self.S + self.sigma * np.sqrt(log_term)
+        return np.sqrt(self.lambda_) * self.S + self.sigma * np.sqrt(log_term)
 
-    def select_action(self, possible_actions: List[np.ndarray], cost: List[float] = None) -> np.ndarray:
+    def select_action(self) -> int:
         """
         Select an action using the D-LinUCB policy.
 
@@ -140,33 +134,19 @@ class dUCBBandit:
         self.t += 1
         self.gamma2_t *= self.gamma**2
 
-        for a in possible_actions:
-            assert np.linalg.norm(a) <= self.L + 1e-8, f"Action norms must be ≤ {self.L}"
-
+        scores = []
         V_inv = np.linalg.inv(self.V)
-        self.theta_hat = V_inv @ self.b
+        theta_hat = V_inv @ self.b
 
-        ucb_values = []
-        if cost is None:
-            cost = [1.0] * len(possible_actions)
-        for a, c in zip(possible_actions, cost):
-            score = self.theta_hat @ a
-            v_inv_a = V_inv @ a
-            uncertainty = beta * np.sqrt(v_inv_a @ self.Ve @ v_inv_a)
-            ucb = (score + uncertainty) / c
-            ucb_values.append(ucb)
+        for act in range(self.num_actions):
+            action_vector = np.array([1.0, act + 1])
+            expected_reward = action_vector @ theta_hat
+            ucb_score = beta * np.sqrt(action_vector @ V_inv @ self.Ve @ V_inv @ action_vector)
+            scores.append((expected_reward + ucb_score) / (act + 1))
+        chosen_action = np.argmax(scores)
+        return chosen_action
 
-        idx = int(np.argmax(ucb_values))
-
-        if self.verbose:
-            print(f"[t={self.t}] Selected action index: {idx}")
-            print("Theta_hat:", self.theta_hat)
-            print("Beta_t:", beta)
-            print("UCB values:", ucb_values)
-
-        return possible_actions[idx]
-
-    def update(self, action: np.ndarray, reward: float):
+    def update(self, chosen_action: int, reward: float):
         """
         Update internal parameters.
 
@@ -174,15 +154,11 @@ class dUCBBandit:
             action (np.ndarray): Action taken.
             reward (float): Observed reward.
         """
-        outer = np.outer(action, action)
-        self.V = self.gamma * self.V + outer + (1.0 - self.gamma) * self.lmbd * np.eye(self.num_features)
-        self.Ve = self.gamma**2 * self.Ve + outer + (1.0 - self.gamma**2) * self.lmbd * np.eye(self.num_features)
-        self.b = self.gamma * self.b + reward * action
-
-        if self.verbose:
-            print("Updated V matrix:", self.V)
-            print("Updated b vector:", self.b)
-            print("Reward:", reward)
+        action_vector = np.array([1.0, chosen_action + 1])
+        outer = np.outer(action_vector, action_vector)
+        self.V = self.gamma * self.V + outer + (1.0 - self.gamma) * self.lambda_ * np.eye(self.num_features)
+        self.Ve = self.gamma**2 * self.Ve + outer + (1.0 - self.gamma**2) * self.lambda_ * np.eye(self.num_features)
+        self.b = self.gamma * self.b + reward * action_vector
 
     def reset(self):
         """
@@ -190,13 +166,9 @@ class dUCBBandit:
         """
         self.t = 0
         self.gamma2_t = 1.0
-        self.V = self.lmbd * np.eye(self.num_features)
-        self.Ve = self.lmbd * np.eye(self.num_features)
+        self.V = self.lambda_ * np.eye(self.num_features)
+        self.Ve = self.lambda_ * np.eye(self.num_features)
         self.b = np.zeros(self.num_features)
-        self.theta_hat = np.zeros(self.num_features)
-
-        if self.verbose:
-            print("Bandit state has been reset.")
 
 
 class BanditCallback(TrainerCallback):
@@ -219,12 +191,19 @@ class BanditCallback(TrainerCallback):
         self.bandit = bandit
         self.num_total_layers = num_total_layers
         self.layer_id_parse_rule = layer_id_parse_rule
-        self.current_loss = np.inf
         self.current_action = None
-        self.possible_actions = np.array([[0] * i + [1] * (self.num_total_layers - i) for i in range(self.num_total_layers)])
-        self.budget_increase = np.array(
-            [sum(action) for action in self.possible_actions]
-        )  # [1] * len(self.possible_actions)
+        self.current_train_loss = None
+        self.loss_history = []
+
+        self.fast_csv_writer = FastCSV(os.path.join(output_dir, "bandit_log.csv"), force=True)
+        self.fast_csv_writer.set_columns(
+            [
+                "global_step",
+                "train_loss",
+                "action",
+                "reward",
+            ]
+        )
 
     def update_trainable_lora_layers(self, model, min_layer_id: int):
         """
@@ -244,7 +223,7 @@ class BanditCallback(TrainerCallback):
                     module.A.requires_grad_(True)
                     module.B.requires_grad_(True)
 
-    def _compute_fisher_score(self, model):
+    def _compute_reward(self, model):
         fisher_score = 0.0
         with torch.no_grad():
             for _, module in model.named_modules():
@@ -271,25 +250,29 @@ class BanditCallback(TrainerCallback):
             trainer: The Trainer instance managing the training process.
         """
         global_step = info["global_step"]
-        if global_step < 25:
+        if global_step < 1:
             return
-        self.current_action = self.bandit.select_action(self.possible_actions, self.budget_increase)
-        min_layer_id = list(self.current_action).index(max(self.current_action))
+        self.current_train_loss = info["train_loss"]
+        self.current_context_vector = np.array(self.loss_history)
+        self.current_action = self.bandit.select_action(self.current_context_vector)
+        min_layer_id = self.current_action
         self.update_trainable_lora_layers(trainer.model, min_layer_id)
-        train_loss = info["train_loss"]
-        if train_loss:
-            self.current_loss = train_loss
         Monitor().print(f"Selected action with min layer ID: {min_layer_id}")
 
     def on_step_end(self, info, trainer):
-        # train_loss = info["train_loss"]
-        # if train_loss and self.current_loss != np.inf:
-        #     loss_change = self.current_loss - train_loss
-        #     self.bandit.update(self.current_action, loss_change)
         if self.current_action is None:
             return
-        fisher_score = self._compute_fisher_score(trainer.model)
-        self.bandit.update(self.current_action, fisher_score)
+        reward = self._compute_reward(trainer.model)
+        self.bandit.update(self.current_action, self.current_context_vector, reward)
+
+        self.fast_csv_writer.append(
+            {
+                "global_step": info["global_step"],
+                "train_loss": math.exp(self.loss_history[-1]) - 1e-8 if self.loss_history else None,
+                "action": self.current_action,
+                "reward": reward,
+            }
+        )
 
     def __repr__(self):
         str = f"BanditCallback with {self.bandit.__class__.__name__}:\n" f"Number of Features: {self.bandit.num_features}\n"
@@ -346,18 +329,19 @@ class BanditApproach(LoRAExperiment):
         layer_parse_rule = lambda name: (int(name.split(".")[3]) if len(name.split(".")) > 3 else 0)  # noqa: E731
         num_total_layers = max(layer_parse_rule(name) for name, _ in model.named_modules()) + 1
         if self.config.bandit == "dLinUCB":
-            bandit = dUCBBandit(
-                num_features=num_total_layers,
+            bandit = dLinUCBBandit(
+                num_actions=num_total_layers,
+                num_features=10,
                 gamma=self.config.gamma,
                 lmbd=self.config.lmda,
                 delta=self.config.delta,
                 sigma=self.config.sigma,
-                L=num_total_layers,
             )
         else:
             raise ValueError(f"Unknown bandit type: {self.config.bandit}")
         return [
             BanditCallback(
+                output_dir=self.get_repetition_output_dir(kwargs.get("repid", 0)),
                 bandit=bandit,
                 num_total_layers=num_total_layers,
                 layer_id_parse_rule=layer_parse_rule,

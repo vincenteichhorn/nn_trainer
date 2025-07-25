@@ -196,6 +196,7 @@ class LoRAExperiment(Experiment):
                 torch.cuda.empty_cache()
 
             print(f"Repetition {repid} completed. Output saved to {output_dir}.")
+            print(f"Total Energy: {prof.get_total_energy(record_steps=["step_begin"]):.2f} J")
             if self.config.watch_done_file:
                 with open(done_file, "w") as f:
                     f.write("done")

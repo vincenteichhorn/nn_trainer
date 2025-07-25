@@ -22,20 +22,25 @@ exp_names = [
     "glue_cola",
     "glue_mrpc",
     "glue_qnli",
-    # "glue_mnli_mismatched",
+    "glue_mnli_mismatched",
     "glue_qqp",
     "glue_rte",
     "glue_sst2",
     "glue_mnli_matched",
     "arc_easy",
-    "arc_challenge",
+    # "_old_arc_challenge",
     "piqa",
     "boolq",
-    # "hellaswag",
-    # "alpaca_mmlu",
-    # "allenai_task288_gigaword_summarization",
+    "hellaswag",
+    "alpaca_mmlu",
+    "allenai_task288_gigaword_summarization",
     "allenai_task219_rocstories_title_answer_generation",
 ]
+
+OUT_DIR = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/"
+
+folder = st.text_input("Enter the folder name", "out")
+OUT_DIR = os.path.join(OUT_DIR, folder)
 
 selected_energy_metric = st.selectbox(
     "Select Energy Metric",
@@ -49,7 +54,7 @@ options_list = [
     "print_basemodel_performance",
     "show_basemodel_performance",
 ]
-options = st.multiselect("Options", options_list, default=[])
+options = st.multiselect("Options", options_list, default=["show_basemodel_performance", "show_error"])
 
 
 def get_x_axis_metrics(exp_name):
@@ -220,6 +225,7 @@ def add_to_pareto_front(
             row=1,
             col=1,
         )
+
     for i, exp in enumerate(exp_names):
         row = i // 4 + 1
         col = i % 4 + 1
@@ -273,13 +279,13 @@ def add_to_pareto_front(
                     legendgroup=dot["legend_group"],
                     error_x=dict(
                         type="data",
-                        array=[dot["x_sem"]],
+                        array=[dot["x_sem"] + 1e-8],
                         visible="show_error" in options,
                         color=dot["color"],
                     ),
                     error_y=dict(
                         type="data",
-                        array=[dot["y_sem"]],
+                        array=[dot["y_sem"] + 1e-8],
                         visible="show_error" in options,
                         color=dot["color"],
                     ),
@@ -288,10 +294,10 @@ def add_to_pareto_front(
                 col=col,
             )
 
-            min_x = min(pareto_front.loc[pareto_front["dataset"] == exp, "x"])
-            max_x = max(pareto_front.loc[pareto_front["dataset"] == exp, "x"])
-            min_y = min(pareto_front.loc[pareto_front["dataset"] == exp, "y"])
-            max_y = max(pareto_front.loc[pareto_front["dataset"] == exp, "y"])
+            # min_x = min(pareto_front.loc[pareto_front["dataset"] == exp, "x"])
+            # max_x = max(pareto_front.loc[pareto_front["dataset"] == exp, "x"])
+            # min_y = min(pareto_front.loc[pareto_front["dataset"] == exp, "y"])
+            # max_y = max(pareto_front.loc[pareto_front["dataset"] == exp, "y"])
             # fig.update_xaxes(range=[min_x - 0.1 * (max_x - min_x), max_x + 0.1 * (max_x - min_x)], row=row, col=col)
             # fig.update_yaxes(range=[min_y - 0.1 * (max_y - min_y), max_y + 0.1 * (max_y - min_y)], row=row, col=col)
     return fig
@@ -319,7 +325,16 @@ def compute_energy_savings(df, baselines, baselines_sems):
 
 def plt(st_obj: st = st):
 
-    OUT_DIR = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/out/"
+    DIR = os.path.join(OUT_DIR, "static/")
+    top_df = pd.read_csv(os.path.join(DIR, "results.csv"))
+    top_df["nlayer"] = top_df["nlayer"].astype(int)
+    top_df["zero"] = 0.0
+
+    # overwrite global "exp_names" with the ones in the top_df
+    global exp_names
+    exp_names = top_df["dataset"].unique().tolist()
+    # sort so that cola is first
+    exp_names.sort(key=lambda x: (x != "glue_cola", x))
 
     x_axis_metrics = {exp: get_energy_metric_name(exp) for exp in exp_names}
     y_axis_metrics = {exp: get_performance_metric_name(exp) for exp in exp_names}
@@ -330,10 +345,6 @@ def plt(st_obj: st = st):
 
     fig = create_pareto_front(exp_names, x_axis_names, y_axis_names)
 
-    DIR = os.path.join(OUT_DIR, "static/")
-    top_df = pd.read_csv(os.path.join(DIR, "results.csv"))
-    top_df["nlayer"] = top_df["nlayer"].astype(int)
-    top_df["zero"] = 0.0
     baselines = {
         exp: top_df.loc[(top_df["dataset"] == exp) & (top_df["nlayer"] == 16), get_baseline_energy_metric_name(exp)].values[
             0
@@ -432,87 +443,6 @@ def plt(st_obj: st = st):
             color="red",
             legend_group="Green Trainer (rho)",
         )
-    except FileNotFoundError:
-        pass
-
-    try:
-        ADPT_DIR = os.path.join(OUT_DIR, "adaptive/")
-        adpt_df = pd.read_csv(os.path.join(ADPT_DIR, "results.csv"))
-        adpt_df = compute_energy_savings(adpt_df, baselines, baselines_sems)
-        # det_df = adpt_df[adpt_df["approach"] == "deterministic"]
-        # annotation_cols = {exp: "rho" for exp in exp_names}
-        # fig = add_to_pareto_front(
-        #     fig,
-        #     exp_names,
-        #     det_df,
-        #     x_axis_metrics,
-        #     y_axis_metrics,
-        #     x_axis_sem_metrics,
-        #     y_axis_sem_metrics,
-        #     annotation_cols,
-        #     color="orange",
-        #     legend_group="Adaptive (Deterministic) (rho)",
-        # )
-        # stoch_df = adpt_df[adpt_df["approach"] == "stochastic"]
-        # stoch_df["annotation"] = ""
-        # annotation_cols = {exp: "annotation" for exp in exp_names}
-        # fig = add_to_pareto_front(
-        #     fig,
-        #     exp_names,
-        #     stoch_df,
-        #     x_axis_metrics,
-        #     y_axis_metrics,
-        #     x_axis_sem_metrics,
-        #     y_axis_sem_metrics,
-        #     annotation_cols,
-        #     color="purple",
-        #     legend_group="Adaptive (Stochastic)",
-        # )
-    except FileNotFoundError:
-        pass
-
-    try:
-        BAN_DIR = os.path.join(OUT_DIR, "bandits/")
-        ban_df = pd.read_csv(os.path.join(BAN_DIR, "results.csv"))
-        ban_df = compute_energy_savings(ban_df, baselines, baselines_sems)
-        dlinucb_df = ban_df[ban_df["bandit"] == "dLinUCB"]
-        dlinucb_df["annotation"] = (
-            dlinucb_df["gamma"].astype(str)
-            + "-"
-            + dlinucb_df["lmda"].astype(str)
-            + "-"
-            + dlinucb_df["delta"].astype(str)
-            + "-"
-            + dlinucb_df["sigma"].astype(str)
-        )
-        annotation_cols = {exp: "annotation" for exp in exp_names}
-        fig = add_to_pareto_front(
-            fig,
-            exp_names,
-            dlinucb_df,
-            x_axis_metrics,
-            y_axis_metrics,
-            x_axis_sem_metrics,
-            y_axis_sem_metrics,
-            annotation_cols,
-            color="magenta",
-            legend_group="dLinUCB Bandit (gamma-lambda-delta-sigma)",
-        )
-        # bayesian_df = ban_df[ban_df["bandit"] == "Bayesian"]
-        # bayesian_df["annotation"] = bayesian_df["alpha"].astype(str) + "-" + bayesian_df["beta"].astype(str)
-        # annotation_cols = {exp: "annotation" for exp in exp_names}
-        # fig = add_to_pareto_front(
-        #     fig,
-        #     exp_names,
-        #     bayesian_df,
-        #     x_axis_metrics,
-        #     y_axis_metrics,
-        #     x_axis_sem_metrics,
-        #     y_axis_sem_metrics,
-        #     annotation_cols,
-        #     color="cyan",
-        #     legend_group="Bayesian Bandit (alpha-beta)",
-        # )
     except FileNotFoundError:
         pass
 

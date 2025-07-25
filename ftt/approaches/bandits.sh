@@ -9,14 +9,14 @@ export $(grep -v '^#' .env | xargs)
 # ps -u $USER | grep -iE 'python|cuda|torch' | awk '{print $1}' | xargs -r kill -9
 
 # Default values
-BASE_OUTPUT_DIR="/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt"
+BASE_OUTPUT_DIR="/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/test"
 EPOCHS=10
-LEARNING_RATE=5e-6
+LEARNING_RATE=1e-5
 TRAIN_BATCH_SIZE=16
 EVAL_BATCH_SIZE=16
 DATASET_NAME="glue_mrpc"
 BASE_MODEL_NAME="meta-llama/Llama-3.2-1B"
-REPETITIONS=5
+REPETITIONS=1
 VALIDATION="forward"
 
 # Example command:
@@ -58,9 +58,8 @@ run_and_check() {
     fi
 }
 
-
 run_and_check poetry run python3 -m ftt.approaches.bandits \
-    --output_dir "$BASE_OUTPUT_DIR/out/bandits/" \
+    --output_dir "$BASE_OUTPUT_DIR/bandits/" \
     --num_repetitions "$REPETITIONS" \
     --training_args.num_epochs "$EPOCHS" \
     --training_args.batch_size "$TRAIN_BATCH_SIZE" \

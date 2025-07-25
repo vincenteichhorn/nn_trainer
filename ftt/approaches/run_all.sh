@@ -16,7 +16,7 @@ TRAIN_BATCH_SIZE=16
 EVAL_BATCH_SIZE=16
 DATASET_NAME="glue_mrpc"
 BASE_MODEL_NAME="meta-llama/Llama-3.2-1B"
-REPETITIONS=5
+REPETITIONS=3
 VALIDATION="forward"
 
 # Example command:
@@ -58,22 +58,6 @@ run_and_check() {
     fi
 }
 
-for NUM_TOP_LAYERS in 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1; do
-    echo "Running LoRA with NUM_TOP_LAYERS=$NUM_TOP_LAYERS"
-    run_and_check poetry run python3 -m ftt.approaches.static \
-        --output_dir "$BASE_OUTPUT_DIR/static/" \
-        --num_repetitions $REPETITIONS \
-        --num_top_layers $NUM_TOP_LAYERS \
-        --training_args.num_epochs $EPOCHS \
-        --training_args.batch_size $TRAIN_BATCH_SIZE \
-        --training_args.learning_rate $LEARNING_RATE \
-        --base_model_name $BASE_MODEL_NAME \
-        --dataset_name $DATASET_NAME \
-        --dataset_validation $VALIDATION \
-        --validation_batch_size $EVAL_BATCH_SIZE
-    echo "Completed LoRA with NUM_TOP_LAYERS=$NUM_TOP_LAYERS"
-done
-
 for SAVINGS in 0.25 0.5 0.75; do
     echo "Running stochastic approach with SAVINGS=$SAVINGS"
     run_and_check poetry run python3 -m ftt.approaches.stochastic \
@@ -90,6 +74,38 @@ for SAVINGS in 0.25 0.5 0.75; do
         --concentration 2
     echo "Completed stochastic approach with SAVINGS=$SAVINGS"
 done
+
+for NUM_TOP_LAYERS in 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1; do
+    echo "Running LoRA with NUM_TOP_LAYERS=$NUM_TOP_LAYERS"
+    run_and_check poetry run python3 -m ftt.approaches.static \
+        --output_dir "$BASE_OUTPUT_DIR/static/" \
+        --num_repetitions $REPETITIONS \
+        --num_top_layers $NUM_TOP_LAYERS \
+        --training_args.num_epochs $EPOCHS \
+        --training_args.batch_size $TRAIN_BATCH_SIZE \
+        --training_args.learning_rate $LEARNING_RATE \
+        --base_model_name $BASE_MODEL_NAME \
+        --dataset_name $DATASET_NAME \
+        --dataset_validation $VALIDATION \
+        --validation_batch_size $EVAL_BATCH_SIZE
+    echo "Completed LoRA with NUM_TOP_LAYERS=$NUM_TOP_LAYERS"
+done
+
+# run_and_check poetry run python3 -m ftt.approaches.bandits \
+#     --output_dir "$BASE_OUTPUT_DIR/bandits/" \
+#     --num_repetitions "$REPETITIONS" \
+#     --training_args.num_epochs "$EPOCHS" \
+#     --training_args.batch_size "$TRAIN_BATCH_SIZE" \
+#     --training_args.learning_rate "$LEARNING_RATE" \
+#     --base_model_name "$BASE_MODEL_NAME" \
+#     --dataset_name "$DATASET_NAME" \
+#     --dataset_validation "$VALIDATION" \
+#     --validation_batch_size "$EVAL_BATCH_SIZE" \
+#     --bandit dLinUCB \
+#     --gamma 0.8 \
+#     --lmda 0.001 \
+#     --delta 0.01 \
+#     --sigma 0.1
 
 for RHO in 0.25 0.5 0.75; do
     echo "Running green trainer with RHO=$RHO"

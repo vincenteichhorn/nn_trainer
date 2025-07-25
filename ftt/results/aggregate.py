@@ -2,6 +2,8 @@ import argparse
 import ast
 import io
 import os
+import random
+import time
 from typing import Dict
 import warnings
 import pandas as pd
@@ -9,6 +11,7 @@ import pandas as pd
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
 from nnt.util.monitor import Monitor
 import re
+import multiprocessing
 
 
 correction = {
@@ -84,7 +87,6 @@ def get_run_result(run_folder: str) -> Dict[str, float]:
         max_val = validation_df[col].max()
         results[f"{col}_max"] = try_float(max_val)
         results[f"{col}_min"] = try_float(min_val)
-
     hardware_signature = "unknown"
     if os.path.exists(os.path.join(run_folder, "hardware_signature")):
         with open(os.path.join(run_folder, "hardware_signature"), "r") as f:
@@ -131,25 +133,43 @@ if __name__ == "__main__":
         print(f"Experiment folder {exp_folder} does not exist. Exiting.")
         exit(1)
     dataset_folders = [f.path for f in os.scandir(exp_folder) if f.is_dir()]
+    warnings.simplefilter(action="ignore", category=FutureWarning)
 
-    df = pd.DataFrame()
+    run_folders = []
 
-    for dataset_run in Monitor().tqdm(dataset_folders, desc="Processing Results"):
+    data = []
+
+    for dataset_run in Monitor().tqdm(dataset_folders, desc="Searching for results"):
         Monitor().print(f"Processing dataset: {dataset_run}")
-        run_folders = [
+        ds_run_folders = [
             f.path for f in os.scandir(dataset_run) if f.is_dir() and os.path.exists(os.path.join(f.path, "donefile"))
         ]
-        for run in Monitor().tqdm(run_folders, desc=f"Processing runs in {os.path.basename(dataset_run)}"):
-            # print(f"Processing run: {run}")
-            run_result = get_run_result(run)
-            if not run_result:
-                continue
-            parsed_run = {k: v(os.path.basename(run)) for k, v in parse_rules.items()}
-            run_result = {**parsed_run, **run_result}
-            run_result["dataset"] = os.path.basename(dataset_run)
-            warnings.simplefilter(action="ignore", category=FutureWarning)
-            df = pd.concat([df, pd.DataFrame([run_result])], ignore_index=True)
+        run_folders.extend(ds_run_folders)
 
+    # Define global fields for parse_rules
+    global_fields = list(parse_rules.keys())
+
+    def process_run(args):
+        run, dataset_run = args
+        run_result = get_run_result(run)
+        if len(run_result) == 0:
+            return None
+        parsed_run = {k: parse_rules[k](os.path.basename(run)) for k in global_fields}
+        run_result = {**parsed_run, **run_result}
+        run_result["dataset"] = os.path.basename(dataset_run)
+        return run_result
+
+    max_processes = min(24, multiprocessing.cpu_count())
+
+    run_args = [(run, os.path.dirname(run)) for run in run_folders]
+    random.shuffle(run_args)
+    with multiprocessing.Pool(processes=max_processes) as pool:
+        results = list(
+            Monitor().tqdm(pool.imap_unordered(process_run, run_args), total=len(run_args), desc="Processing runs")
+        )
+    data.extend([r for r in results if r is not None])
+
+    df = pd.DataFrame(data)
     if df.empty:
         print("No results found. Exiting.")
         exit(0)

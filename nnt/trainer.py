@@ -182,6 +182,7 @@ class Trainer:
             return {
                 "epoch": current_epoch_floating,
                 "global_step": global_step,
+                "num_train_steps": num_train_steps,
                 "learning_rate": self.optimizer.param_groups[0]["lr"],
                 "timestamp": get_current_time(),
                 "current_batch": current_batch,

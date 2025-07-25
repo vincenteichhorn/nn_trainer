@@ -59,7 +59,7 @@ sbatch <<EOT
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --partition=$PARTITION
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=100000
 #SBATCH --time=$TIME_LIMIT
 #SBATCH --mail-type=END,FAIL
