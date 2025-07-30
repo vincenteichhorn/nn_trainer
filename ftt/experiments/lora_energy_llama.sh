@@ -21,4 +21,4 @@ which poetry
 pwd
 whoami
 
-poetry run python3 -m ftt.experiments.lora_energy --out_file out/energy_lora_a100_llama.csv --model meta-llama/Llama-3.2-1B
+poetry run python3 -m ftt.experiments.lora_energy --out_file out/energy_lora_a100_llama.csv --model_name meta-llama/Llama-3.2-1B

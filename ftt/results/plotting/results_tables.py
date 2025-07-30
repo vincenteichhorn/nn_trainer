@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 import pandas as pd
+import matplotlib.pyplot as plt
 
 BASE_DIR = "ftt/out/approach_out/"
 
@@ -24,9 +25,9 @@ task_groups = {
         "hellaswag",
     ],
     "NLG": [
+        "alpaca_mmlu",
         "allenai_task219_rocstories_title_answer_generation",
         "allenai_task288_gigaword_summarization",
-        "alpaca_mmlu",
     ],
 }
 
@@ -47,9 +48,9 @@ exp_names = [
     "piqa",
     "boolq",
     "hellaswag",
+    "alpaca_mmlu",
     "allenai_task219_rocstories_title_answer_generation",
     "allenai_task288_gigaword_summarization",
-    "alpaca_mmlu",
 ]
 
 pretty_metrics = {
@@ -444,21 +445,191 @@ def green_trainer_table(rho=0.5):
     st.write(df)
 
 
-def the_mother_table():
+def the_mother_pareto_front():
+
     df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
-    df = df.rename(columns={"savings": "param"})
-    df["approach"] = "stochastic"
     base = get_base_model_performance(df)
-    df = get_base_table(df, add_cols=["param"])
-    base["param"] = "base"
+    df = get_base_table(df, add_cols=["savings"])
+    df.rename(columns={"savings": "param"}, inplace=True)
+    df["approach"] = "stochastic"
+    base["savings"] = "base"
     base["approach"] = "base"
+    base.rename(columns={"savings": "param"}, inplace=True)
     df = pd.concat([df, base], ignore_index=True)
 
-    static = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
-    satic = static.rename(columns={"nlayer": "param"})
-    satic["approach"] = "static"
-    df = pd.concat([df, satic], ignore_index=True)
+    gt = pd.read_csv(os.path.join(BASE_DIR, "green_trainer/results.csv"))
+    gt = get_base_table(gt, add_cols=["rho"])
+    gt = gt.rename(columns={"rho": "param"})
+    gt["approach"] = "green_trainer"
+    df = pd.concat([df, gt], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["param"] = 17 - fl["nlayer"]
+    fl = fl.drop(columns=["nlayer"])
+    fl["approach"] = "static"
+    df = pd.concat([df, fl], ignore_index=True)
     st.write(df)
+
+    for col in df.columns:
+        if "flops" in col:
+            # pFLOPs
+            df[col] /= 1e15
+        if "energy" in col:
+            # kJ
+            df[col] /= 1e3
+
+    # create a matplotlib figure with a scatter plot of the pareto front
+    # there are 16 datasets, therefore create a 4x4 grid of subplots
+    num_rows = 4
+    num_cols = 4
+    grid = [st.columns(num_cols) for _ in range(num_rows)]
+    approaches = df["approach"].unique()
+    # sort so that base is first
+    approaches = sorted(approaches, key=lambda x: x == "base", reverse=True)
+    for ds in df["dataset"].unique():
+        row = order.index(ds) // num_cols
+        col = order.index(ds) % num_cols
+        fig, ax = plt.subplots(figsize=(4, 3))
+        for approach in approaches:
+            subset = df[(df["dataset"] == ds) & (df["approach"] == approach)]
+            if approach == "base":
+                # add a line of the base model performance
+                ax.axhline(y=subset["performance"].values[0], color="black", linestyle="--", label="Base Model")
+                continue
+            if subset.empty:
+                continue
+            param_dsc = {"green_trainer": "rho", "stochastic": "e", "static": "min. l"}
+            approach_dsc = {
+                "green_trainer": "Green Trainer",
+                "stochastic": "Stochastic Top Layers",
+                "static": "Static Top Layers",
+            }
+            color = (
+                "green"
+                if approach == "green_trainer"
+                else "grey" if approach == "static" else "blue" if approach == "stochastic" else "black"
+            )
+            ax.scatter(
+                subset["train_energy_mean"],
+                subset["performance"],
+                label=f"{approach_dsc[approach]} ({param_dsc[approach]})",
+                s=50,
+                color=color,
+            )
+            # Add annotation for each dot with its param value
+            for idx, row_ in subset.iterrows():
+                ax.annotate(
+                    str(row_["param"]),
+                    (row_["train_energy_mean"], row_["performance"]),
+                    textcoords="offset points",
+                    xytext=(0, -15),
+                    ha="center",
+                    fontsize=8,
+                    color="black",
+                )
+        ax.set_title(f"{pretty_names[ds]}")
+        ax.set_xlabel("Train Energy (kJ)")
+        performance_dsc = {
+            "glue_cola": "MCC",
+            "glue_sst2": "Accuracy",
+            "glue_mrpc": "F1",
+            "glue_qqp": "F1",
+            "glue_mnli_matched": "Accuracy",
+            "glue_mnli_mismatched": "Accuracy",
+            "glue_qnli": "Accuracy",
+            "glue_rte": "Accuracy",
+            "arc_easy": "Accuracy",
+            "arc_challenge": "Accuracy",
+            "piqa": "Accuracy",
+            "boolq": "Accuracy",
+            "hellaswag": "Accuracy",
+            "allenai_task219_rocstories_title_answer_generation": "ROUGE-L",
+            "allenai_task288_gigaword_summarization": "ROUGE-L",
+            "alpaca_mmlu": "ROUGE-L",
+        }
+        ax.set_ylabel(performance_dsc[ds])
+        # set x ticks to be in scienfic notation
+        # ax.set_xticks(ax.get_xticks()[::2])  # Show every second xtick
+        ax.set_xticklabels([f"{tick:.1f}" for tick in ax.get_xticks()])
+        # ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
+        ax.set_yticklabels([f"{tick:.1f}" for tick in ax.get_yticks()])
+        if row == 0 and col == 0:
+            ax.legend()
+        grid[row][col].pyplot(fig)
+
+    df["group"] = df["dataset"].apply(
+        lambda x: "NLU" if x in task_groups["NLU"] else ("reasoning" if x in task_groups["reasoning"] else "NLG")
+    )
+    gdf = (
+        df.groupby(["group", "approach", "param"])
+        .agg(
+            train_energy_mean=("train_energy_mean", "mean"),
+            performance_mean=("performance", "mean"),
+            total_flops_mean=("total_flops_mean", "mean"),
+            total_time_mean=("total_time_mean", "mean"),
+        )
+        .reset_index()
+    )
+    st.write(gdf)
+    for metric in ["train_energy_mean", "total_flops_mean", "total_time_mean"]:
+        cols = st.columns(3)
+        for group in gdf["group"].unique():
+            # create three pareto front plots for each group
+            fig, ax = plt.subplots(figsize=(4, 3))
+            subset = gdf[gdf["group"] == group]
+            col = list(task_groups.keys()).index(group)
+            for approach in approaches:
+                subset_ = subset[subset["approach"] == approach]
+                if subset_.empty or approach == "base":
+                    continue
+                param_dsc = {"green_trainer": "rho", "stochastic": "e", "static": "min. l"}
+                approach_dsc = {
+                    "green_trainer": "Green Trainer",
+                    "stochastic": "Stochastic Top Layers",
+                    "static": "Static Top Layers",
+                }
+                color = (
+                    "green"
+                    if approach == "green_trainer"
+                    else "grey" if approach == "static" else "blue" if approach == "stochastic" else "black"
+                )
+                ax.scatter(
+                    subset_[metric],
+                    subset_["performance_mean"],
+                    label=f"{approach_dsc[approach]} ({param_dsc[approach]})",
+                    s=50,
+                    color=color,
+                )
+                # Add annotation for each dot with its param value
+                for idx, row_ in subset_.iterrows():
+                    ax.annotate(
+                        str(row_["param"]),
+                        (row_[metric], row_["performance_mean"]),
+                        textcoords="offset points",
+                        xytext=(0, -15),
+                        ha="center",
+                        fontsize=8,
+                        color="black",
+                    )
+            ax.set_title("Reasoning" if group == "reasoning" else group)
+            ax.set_xlabel(
+                "Energy (kJ)" if metric == "train_energy_mean" else "TFLOPs" if metric == "total_flops_mean" else "Time (s)"
+            )
+            performance_dsc = {
+                "NLU": "Average Performance",
+                "reasoning": "Average Performance",
+                "NLG": "Average ROUGE-L",
+            }
+            ax.set_ylabel(performance_dsc[group])
+            # set x ticks to be in scienfic notation
+            # ax.set_xticks(ax.get_xticks()[::2])  # Show every second xtick
+            ax.set_xticklabels([f"{tick:.1f}" for tick in ax.get_xticks()])
+            # ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
+            ax.set_yticklabels([f"{tick:.1f}" for tick in ax.get_yticks()])
+            if group == "NLU" and metric == "train_energy_mean":
+                ax.legend()
+            cols[col].pyplot(fig)
 
 
 if __name__ == "__main__":
@@ -476,8 +647,8 @@ if __name__ == "__main__":
     # st.write("---")
     static_optimal_table()
 
-    # st.write("---")
-    # stochastic_table(0.75)
+    st.write("---")
+    stochastic_table(0.75)
 
     st.write("---")
     stochastic_table(0.5)
@@ -485,5 +656,5 @@ if __name__ == "__main__":
     st.write("---")
     green_trainer_table(0.5)
 
-    st.write("---")
-    the_mother_table()
+    # st.write("---")
+    the_mother_pareto_front()

@@ -21,4 +21,21 @@ which poetry
 pwd
 whoami
 
-poetry run python3 -m ftt.experiments.lora_energy --out_file out/energy_lora_a100_llama.csv --model FacebookAI/roberta-large
+poetry run python3 -m ftt.experiments.lora_energy --out_file out/energy_lora_a100_roberta.csv --model_name FacebookAI/roberta-large
+
+
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     lora_b_rob \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/experiments/lora_energy_roberta.sh \
+#     2-00:00:00 \
+#     gx25 \
+#     "" \
+#     gpu
+
+# bash /sc/home/vincent.eichhorn/nn_trainer/ftt/scripts/cluster_fuck.sh \
+#     lora_b_llam \
+#     /sc/home/vincent.eichhorn/nn_trainer/ftt/experiments/lora_energy_llama.sh \
+#     2-00:00:00 \
+#     gx25 \
+#     "" \
+#     gpu

@@ -76,7 +76,9 @@ def energy_eval_lora(model_name, rank, input_length, batch_size, num_samples, nu
             collate_fn=DataCollatorForCausalLM(tokenizer),
         )
         with NvidiaProfiler() as prof:
-            for i, batch in Monitor().tqdm(enumerate(dataloader), desc="Evaluating energy metrics"):
+            for i, batch in Monitor().tqdm(
+                enumerate(dataloader), desc="Evaluating energy metrics", total=num_samples + num_warumup_samples
+            ):
 
                 if i < num_warumup_samples:
                     continue
@@ -108,16 +110,19 @@ def energy_eval_lora(model_name, rank, input_length, batch_size, num_samples, nu
         single_batch = {k: v.to(model.device) for k, v in single_batch.items()}
         with TorchProfiler() as profiler:
             with profiler.record_context("forward"):
-                model(**single_batch)
+                outputs = model(**single_batch)
             with profiler.record_context("backward"):
                 outputs.loss.backward()
             with profiler.record_context("optimizer"):
                 optimizer.step()
-        energy_metrics["forward_flops"] = profiler.get_total_flops(record_steps=["forward"])
-        energy_metrics["forward_backward_flops"] = profiler.get_total_flops(record_steps=["forward", "backward"])
-        energy_metrics["forward_backward_optimizer_flops"] = profiler.get_total_flops(
-            record_steps=["forward", "backward", "optimizer"]
-        )
+        flops_df = profiler.get_flops_by_step().reset_index(names=["step"])
+        energy_metrics["forward_flops"] = flops_df.loc[flops_df["step"] == "forward", "flops"].values[0]
+        energy_metrics["forward_backward_flops"] = flops_df.loc[
+            flops_df["step"].isin(["forward", "backward"]), "flops"
+        ].sum()
+        energy_metrics["forward_backward_optimizer_flops"] = flops_df.loc[
+            flops_df["step"].isin(["forward", "backward", "optimizer"]), "flops"
+        ].sum()
 
         energy_metrics["num_trainable_parameters"] = sum(p.numel() for p in model.parameters() if p.requires_grad)
         return energy_metrics
@@ -146,13 +151,13 @@ if __name__ == "__main__":
 
     arg_parser = argparse.ArgumentParser(description="Energy evaluation for LoRA models")
     arg_parser.add_argument("--out_file", type=str, default=out_file, help="Output file for results")
-    arg_parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-1B", help="Model name to evaluate")
+    arg_parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.2-1B", help="Model name to evaluate")
     args = arg_parser.parse_args()
     out_file = args.out_file
-    models = [args.model]
+    models = [args.model_name]
     input_lengths = [256]
     batch_sizes = [20, 16, 12, 8, 4]
-    ranks = [-1, 1, 2, 4, 8, 16, 32] + list(range(64, 512 + 64, 64))
+    ranks = [-1, 8, 1, 4, 16, 32] + list(range(64, 512 + 64, 64))
     repetitions = list(range(10))
     grid = list(product(repetitions, batch_sizes, models, input_lengths, ranks))
 
