@@ -43,7 +43,7 @@ class LoggingCallback(TrainerCallback):
         self.log_file = os.path.join(output_dir, "train_log.csv")
         os.makedirs(output_dir, exist_ok=True)
         self.fast_csv_writer = FastCSV(self.log_file, force=True)
-        self.skip_info_keys = ["current_batch", "num_train_steps"]
+        self.skip_info_keys = ["current_batch", "num_train_steps", "current_output"]
         self.writer_has_set_columns = False
 
     def on_step_end(self, info: dict, trainer: "Trainer") -> None:

@@ -29,6 +29,17 @@ class TrainerCallback:
         """
         pass
 
+    def on_step_middle(self, info: dict, trainer: "Trainer") -> None:
+        """
+        Called in the middle of each training step.
+        After forward pass and before backward pass.
+
+        Args:
+            info (dict): Training info for the step.
+            trainer (Trainer): Trainer instance.
+        """
+        pass
+
     @abstractmethod
     def on_step_end(self, info: dict, trainer: "Trainer") -> None:
         """

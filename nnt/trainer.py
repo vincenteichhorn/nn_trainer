@@ -166,6 +166,7 @@ class Trainer:
         global_step = 0
         current_epoch_floating = 0.0
         current_batch = None
+        current_output = None
         train_loss = None
         monitor_every = (
             self.training_args.monitor_every
@@ -186,6 +187,7 @@ class Trainer:
                 "learning_rate": self.optimizer.param_groups[0]["lr"],
                 "timestamp": get_current_time(),
                 "current_batch": current_batch,
+                "current_output": current_output,
                 "train_loss": train_loss,
             }
 
@@ -217,9 +219,11 @@ class Trainer:
                     self._call_callbacks("on_step_begin", _get_info())
                     self.model.zero_grad()
                     outputs = self.model(**batch)
+                    current_output = outputs
                     loss = outputs.loss
-                    loss.backward()
                     train_loss = loss.item()
+                    self._call_callbacks("on_step_middle", _get_info())
+                    loss.backward()
                     self.optimizer.step()
                     self._call_callbacks("on_step_end", _get_info())
                     pbar.update(1)

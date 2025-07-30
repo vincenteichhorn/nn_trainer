@@ -1,7 +1,6 @@
 # NN Trainer
 
-A modular framework for training neural networks with PyTorch, supporting advanced profiling, validation, metrics, and flexible dataset handling.  
-Includes utilities for training large language models (LLMs) such as Meta-Llama-3.2-1B with custom datasets.
+I've created a modular framework for training neural networks with PyTorch, which includes advanced profiling, validation, metrics, and flexible dataset handling. This framework is a by-product of my thesis work on energy-efficient fine-tuning of large language models (LLMs). Relevant code of the thesis can be found in the `ftt` directory, which stands for "Fine-Tuning the Top".
 
 ---
 

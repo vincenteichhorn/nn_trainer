@@ -3,6 +3,7 @@ import ast
 import io
 import os
 import random
+import sys
 import time
 from typing import Dict
 import warnings
@@ -14,6 +15,8 @@ import re
 import multiprocessing
 
 
+# correction for troubleshooting energy and time values
+# correction 0 is indentidy
 correction = {
     "mapping": {"gx29@NVIDIA-A40-45G": 0, "gx02@NVIDIA-A100-SXM4-80GB-80G": 0},
     "correction": {
@@ -83,10 +86,14 @@ def get_run_result(run_folder: str) -> Dict[str, float]:
     for col in validation_df.columns:
         if col in ["timestamp", "learning_rate"]:
             continue
-        min_val = validation_df[col].min()
-        max_val = validation_df[col].max()
-        results[f"{col}_max"] = try_float(max_val)
-        results[f"{col}_min"] = try_float(min_val)
+        try:
+            min_val = validation_df[col].apply(try_float).min()
+            max_val = validation_df[col].apply(try_float).max()
+            results[f"{col}_max"] = try_float(max_val)
+            results[f"{col}_min"] = try_float(min_val)
+        except Exception as e:
+            Monitor().print(f"Error processing column {col} in validation log: {e}")
+            sys.exit(1)
     hardware_signature = "unknown"
     if os.path.exists(os.path.join(run_folder, "hardware_signature")):
         with open(os.path.join(run_folder, "hardware_signature"), "r") as f:
@@ -159,7 +166,7 @@ if __name__ == "__main__":
         run_result["dataset"] = os.path.basename(dataset_run)
         return run_result
 
-    max_processes = min(24, multiprocessing.cpu_count())
+    max_processes = min(10, multiprocessing.cpu_count())
 
     run_args = [(run, os.path.dirname(run)) for run in run_folders]
     random.shuffle(run_args)

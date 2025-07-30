@@ -65,7 +65,7 @@ class ValidatorCallback(TrainerCallback):
         os.makedirs(output_dir, exist_ok=True)
         self.fast_csv_writer = FastCSV(self.validation_log_file, force=True)
         self.writer_has_set_columns = False
-        self.skip_info_keys = ["current_batch"]
+        self.skip_info_keys = ["current_batch", "num_train_steps", "current_output"]
 
     def validate(self, info: dict, trainer: "Trainer") -> None:
         global_step = info["global_step"]

@@ -28,7 +28,7 @@ exp_names = [
     "glue_sst2",
     "glue_mnli_matched",
     "arc_easy",
-    # "_old_arc_challenge",
+    "arc_challenge",
     "piqa",
     "boolq",
     "hellaswag",
@@ -37,10 +37,7 @@ exp_names = [
     "allenai_task219_rocstories_title_answer_generation",
 ]
 
-OUT_DIR = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/"
-
-folder = st.text_input("Enter the folder name", "out")
-OUT_DIR = os.path.join(OUT_DIR, folder)
+OUT_DIR = "ftt/out/approach_out/"
 
 selected_energy_metric = st.selectbox(
     "Select Energy Metric",
@@ -69,11 +66,11 @@ def get_x_axis_metrics(exp_name):
 def get_x_axis_name(exp_name):
     dct = {
         "flops_savings": "Abs. FLOPs Savings (Compared to Full LoRA)",
-        "rel_flops_savings": "Rel. FLOPs Savings (%)",
-        "energy_savings": "Abs. Energy Savings (Compared to Full LoRA)",
-        "rel_energy_savings": "Rel. Energy Savings (%)",
-        "time_savings": "Abs. Time Savings (Compared to Full LoRA)",
-        "rel_time_savings": "Rel. Time Savings (%)",
+        "rel_flops_savings": "Rel. FLOPs Savings (%) (Compared to Full LoRA)",
+        "energy_savings": "Abs. Energy Savings (J) (Compared to Full LoRA)",
+        "rel_energy_savings": "Rel. Energy Savings (%) (Compared to Full LoRA)",
+        "time_savings": "Abs. Time Savings (s) (Compared to Full LoRA)",
+        "rel_time_savings": "Rel. Time Savings (%) (Compared to Full LoRA)",
     }
     return dct[get_x_axis_metrics(exp_name)]
 
@@ -184,8 +181,8 @@ def get_subplot_title(exp_name):
         "boolq": "BoolQ",
         "hellaswag": "HellaSwag",
         "alpaca_mmlu": "Alpaca",
-        "allenai_task288_gigaword_summarization": "AllanAI NI Gigaword Summarization",
-        "allenai_task219_rocstories_title_answer_generation": "AllanAI NI RocStories Title Answer Generation",
+        "allenai_task288_gigaword_summarization": "AllenAI NI Gigaword Summarization",
+        "allenai_task219_rocstories_title_answer_generation": "AllenAI NI RocStories Title Generation",
     }
     if exp_name in dct:
         return dct[exp_name]
@@ -331,10 +328,9 @@ def plt(st_obj: st = st):
     top_df["zero"] = 0.0
 
     # overwrite global "exp_names" with the ones in the top_df
-    global exp_names
-    exp_names = top_df["dataset"].unique().tolist()
-    # sort so that cola is first
-    exp_names.sort(key=lambda x: (x != "glue_cola", x))
+    # global exp_names
+    # exp_names = top_df["dataset"].unique().tolist()
+    # exp_names.sort(key=lambda x: (x != "glue_cola", x))
 
     x_axis_metrics = {exp: get_energy_metric_name(exp) for exp in exp_names}
     y_axis_metrics = {exp: get_performance_metric_name(exp) for exp in exp_names}

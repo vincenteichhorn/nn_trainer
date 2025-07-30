@@ -3,7 +3,7 @@ import streamlit as st
 from dotenv import load_dotenv
 import pandas as pd
 
-BASE_DIR = "/sc/projects/sci-herbrich/chair/lora-bp/vincent.eichhorn/nnt/out/"
+BASE_DIR = "ftt/out/approach_out/"
 
 task_groups = {
     "NLU": [
@@ -24,11 +24,14 @@ task_groups = {
         "hellaswag",
     ],
     "NLG": [
-        "rocstories_title_answer_generation",
-        "gigaword_summarization",
+        "allenai_task219_rocstories_title_answer_generation",
+        "allenai_task288_gigaword_summarization",
         "alpaca_mmlu",
     ],
 }
+
+order = list(task_groups["NLU"]) + list(task_groups["reasoning"]) + list(task_groups["NLG"])
+
 
 exp_names = [
     "glue_cola",
@@ -171,6 +174,7 @@ def static_selection_table():
     df = get_base_table(df, add_cols=["nlayer"])
     df["c"] = 17 - df["nlayer"]
     df = df[df["c"].isin([1, 4, 8, 12, 16])]
+
     base["c"] = "base"
     df = pd.concat([df, base], ignore_index=True)
     df = df.pivot(index="c", columns="dataset", values=["performance", "performance_sem"])
@@ -180,8 +184,11 @@ def static_selection_table():
     values = values.applymap(lambda x: f"{x:.2f}" if pd.notnull(x) else "N/A")
     values_sem = values_sem.applymap(lambda x: f" ({x:.2f})" if pd.notnull(x) else "")
     df = values + values_sem
-    # add pretty names
-    df.columns = [f"{pretty_names[col]}" for col in df.columns]
+    # sort columbs by order
+    df = df.reindex(columns=order, fill_value="N/A")
+    df = df.rename(columns={col: pretty_names[col] for col in df.columns})
+
+    st.write("### Static Top Layers (Selection)")
     st.write(df)
 
 
@@ -230,6 +237,7 @@ def static_optimal_table():
             "train_time_sem",
             "performance",
             "performance_sem",
+            "performance_reduction (%)",
             "train_energy_mean_reduction (%)",
             "train_time_mean_reduction (%)",
             "total_flops_mean_reduction (%)",
@@ -239,6 +247,7 @@ def static_optimal_table():
         value_name="value",
     )
     df = df.pivot_table(index=["metric"], columns="dataset", values="value", aggfunc="first")
+    df = df.reindex(columns=order, fill_value="N/A")
     df = df.rename(columns={col: pretty_names[col] for col in df.columns})
     for i, row in df.iterrows():
         if "_sem" in row.name:
@@ -255,10 +264,11 @@ def static_optimal_table():
         else:
             df.loc[i] = [f"{value:.2f}" if pd.notnull(value) else "N/A" for value in row.values]
     df = df[~df.index.str.endswith("_sem")]
+    st.write('### Static Top Layers ("Optimal" static top layers within 3% performance degradation)')
     st.write(df)
 
 
-def stochastic_table():
+def stochastic_table(rho=0.75):
 
     df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
     base = get_base_model_performance(df)
@@ -289,7 +299,7 @@ def stochastic_table():
                 (base_value - df.loc[df["dataset"] == dataset, metric]) / base_value * 100
             )
 
-    df = df[df["savings"].isin([0.25])]
+    df = df[df["savings"].isin([rho])]
 
     df = df.melt(
         id_vars=["dataset"],
@@ -311,6 +321,7 @@ def stochastic_table():
         value_name="value",
     )
     df = df.pivot_table(index=["metric"], columns="dataset", values="value", aggfunc="first")
+    df = df.reindex(order, axis=1)
     df = df.rename(columns={col: pretty_names[col] for col in df.columns})
     for i, row in df.iterrows():
         if "_sem" in row.name:
@@ -341,6 +352,112 @@ def stochastic_table():
             "train_time_mean_reduction (%)",
         ]
     )
+    st.write("### Stochastic Top Layers (rho=" + str(rho) + ")")
+    st.write(df)
+
+
+def green_trainer_table(rho=0.5):
+
+    df = pd.read_csv(os.path.join(BASE_DIR, "green_trainer/results.csv"))
+    base = get_base_model_performance(df)
+
+    df = get_base_table(df, add_cols=["rho"])
+    base["rho"] = "base"
+    df = pd.concat([df, base], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["c"] = 17 - fl["nlayer"]
+    fl = fl[fl["c"] == 1]
+    fl = fl.drop(columns=["nlayer", "c"])
+    fl["rho"] = "full LoRA"
+    df = pd.concat([df, fl], ignore_index=True)
+
+    for col in df.columns:
+        if "flops" in col:
+            # pFLOPs
+            df[col] /= 1e15
+        if "energy" in col:
+            # kJ
+            df[col] /= 1e3
+    for dataset in df["dataset"].unique():
+        for metric in ["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]:
+            base_value = df.loc[(df["dataset"] == dataset) & (df["rho"] == "full LoRA"), metric].values[0]
+            df.loc[df["dataset"] == dataset, f"{metric}_reduction (%)"] = (
+                (base_value - df.loc[df["dataset"] == dataset, metric]) / base_value * 100
+            )
+
+    df = df[df["rho"].isin([rho])]
+
+    df = df.melt(
+        id_vars=["dataset"],
+        value_vars=[
+            "train_energy_mean",
+            "train_time_mean",
+            "total_flops_mean",
+            "train_energy_sem",
+            "train_time_sem",
+            "performance",
+            "performance_sem",
+            "performance_reduction (%)",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean_reduction (%)",
+            "total_flops_mean_reduction (%)",
+            "rho",
+        ],
+        var_name="metric",
+        value_name="value",
+    )
+    df = df.pivot_table(index=["metric"], columns="dataset", values="value", aggfunc="first")
+    df = df.reindex(order, axis=1)
+    df = df.rename(columns={col: pretty_names[col] for col in df.columns})
+    for i, row in df.iterrows():
+        if "_sem" in row.name:
+            sem_vals = row.values
+            value_row_name = (
+                row.name.replace("_sem", "_mean") if not "performance" in row.name else row.name.replace("_sem", "")
+            )
+            if value_row_name in df.index:
+                value_vals = df.loc[df.index == value_row_name].values[0]
+                df.loc[df.index == value_row_name] = [
+                    f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+                    for value, sem in zip(value_vals, sem_vals)
+                ]
+        else:
+            df.loc[i] = [f"{value:.2f}" if pd.notnull(value) else "N/A" for value in row.values]
+    df = df[~df.index.str.endswith("_sem")]
+    df = df.rename(index={"savings": "rho"})
+    df = df.reindex(
+        [
+            "rho",
+            "performance",
+            "performance_reduction (%)",
+            "total_flops_mean",
+            "total_flops_mean_reduction (%)",
+            "train_energy_mean",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean",
+            "train_time_mean_reduction (%)",
+        ]
+    )
+    st.write("### Green Trainer Top Layers (rho=" + str(rho) + ")")
+    st.write(df)
+
+
+def the_mother_table():
+    df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
+    df = df.rename(columns={"savings": "param"})
+    df["approach"] = "stochastic"
+    base = get_base_model_performance(df)
+    df = get_base_table(df, add_cols=["param"])
+    base["param"] = "base"
+    base["approach"] = "base"
+    df = pd.concat([df, base], ignore_index=True)
+
+    static = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    satic = static.rename(columns={"nlayer": "param"})
+    satic["approach"] = "static"
+    df = pd.concat([df, satic], ignore_index=True)
     st.write(df)
 
 
@@ -354,8 +471,19 @@ if __name__ == "__main__":
         initial_sidebar_state="expanded",
     )
     load_dotenv()
-    static_selection_table()
-    st.write("---")
+    # static_selection_table()
+
+    # st.write("---")
     static_optimal_table()
+
+    # st.write("---")
+    # stochastic_table(0.75)
+
     st.write("---")
-    stochastic_table()
+    stochastic_table(0.5)
+
+    st.write("---")
+    green_trainer_table(0.5)
+
+    st.write("---")
+    the_mother_table()
