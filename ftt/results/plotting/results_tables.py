@@ -469,7 +469,6 @@ def the_mother_pareto_front():
     fl = fl.drop(columns=["nlayer"])
     fl["approach"] = "static"
     df = pd.concat([df, fl], ignore_index=True)
-    st.write(df)
 
     for col in df.columns:
         if "flops" in col:
@@ -483,7 +482,7 @@ def the_mother_pareto_front():
     # there are 16 datasets, therefore create a 4x4 grid of subplots
     num_rows = 4
     num_cols = 4
-    grid = [st.columns(num_cols) for _ in range(num_rows)]
+    grid = [st.columns(num_cols, vertical_alignment="bottom") for _ in range(num_rows)]
     approaches = df["approach"].unique()
     # sort so that base is first
     approaches = sorted(approaches, key=lambda x: x == "base", reverse=True)
@@ -492,11 +491,37 @@ def the_mother_pareto_front():
         col = order.index(ds) % num_cols
         fig, ax = plt.subplots(figsize=(4, 3))
         for approach in approaches:
-            subset = df[(df["dataset"] == ds) & (df["approach"] == approach)]
+            data_subset = df[df["dataset"] == ds]
+            subset = data_subset[data_subset["approach"] == approach]
             if approach == "base":
                 # add a line of the base model performance
-                ax.axhline(y=subset["performance"].values[0], color="black", linestyle="--", label="Base Model")
+                ax.axhline(y=subset["performance"].values[0], color="black", linestyle="--")
+                # add annotation for the base model performance
+                ax.annotate(
+                    "Base Model",
+                    (data_subset["train_energy_mean"].min(), subset["performance"].values[0]),
+                    textcoords="offset points",
+                    xytext=(-5, 5),
+                    ha="left",
+                    fontsize=8,
+                    color="black",
+                )
                 continue
+            if approach == "static":
+                # add v line for full LoRA energy
+                full_lora_energy = subset[subset["param"] == 1]["train_energy_mean"].values[0]
+                ax.axvline(x=full_lora_energy, color="orange", linestyle="--")
+                ax.annotate(
+                    "Full LoRA",
+                    (full_lora_energy, (data_subset["performance"].min())),
+                    textcoords="offset points",
+                    xytext=(-7, 10),
+                    ha="center",
+                    fontsize=8,
+                    color="orange",
+                    rotation=90,
+                )
+
             if subset.empty:
                 continue
             param_dsc = {"green_trainer": "rho", "stochastic": "e", "static": "min. l"}
@@ -519,8 +544,9 @@ def the_mother_pareto_front():
             )
             # Add annotation for each dot with its param value
             for idx, row_ in subset.iterrows():
+                annot = str(row_["param"])
                 ax.annotate(
-                    str(row_["param"]),
+                    annot,
                     (row_["train_energy_mean"], row_["performance"]),
                     textcoords="offset points",
                     xytext=(0, -15),
@@ -555,7 +581,7 @@ def the_mother_pareto_front():
         # ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
         ax.set_yticklabels([f"{tick:.1f}" for tick in ax.get_yticks()])
         if row == 0 and col == 0:
-            ax.legend()
+            ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.5), ncol=1)
         grid[row][col].pyplot(fig)
 
     df["group"] = df["dataset"].apply(
@@ -568,12 +594,14 @@ def the_mother_pareto_front():
             performance_mean=("performance", "mean"),
             total_flops_mean=("total_flops_mean", "mean"),
             total_time_mean=("total_time_mean", "mean"),
+            train_energy_sem=("train_energy_sem", "mean"),
+            performance_sem=("performance_sem", "mean"),
+            total_time_sem=("total_time_sem", "mean"),
         )
         .reset_index()
     )
-    st.write(gdf)
     for metric in ["train_energy_mean", "total_flops_mean", "total_time_mean"]:
-        cols = st.columns(3)
+        cols = st.columns(3, vertical_alignment="bottom")
         for group in gdf["group"].unique():
             # create three pareto front plots for each group
             fig, ax = plt.subplots(figsize=(4, 3))
@@ -583,6 +611,20 @@ def the_mother_pareto_front():
                 subset_ = subset[subset["approach"] == approach]
                 if subset_.empty or approach == "base":
                     continue
+                if approach == "static":
+                    # add v line for full LoRA energy
+                    full_lora_energy = subset_[subset_["param"] == 1][metric].values[0]
+                    ax.axvline(x=full_lora_energy, color="orange", linestyle="--")
+                    ax.annotate(
+                        "Full LoRA",
+                        (full_lora_energy, (subset_["performance_mean"].min())),
+                        textcoords="offset points",
+                        xytext=(-7, 10),
+                        ha="center",
+                        fontsize=8,
+                        color="orange",
+                        rotation=90,
+                    )
                 param_dsc = {"green_trainer": "rho", "stochastic": "e", "static": "min. l"}
                 approach_dsc = {
                     "green_trainer": "Green Trainer",
@@ -623,13 +665,108 @@ def the_mother_pareto_front():
             }
             ax.set_ylabel(performance_dsc[group])
             # set x ticks to be in scienfic notation
-            # ax.set_xticks(ax.get_xticks()[::2])  # Show every second xtick
-            ax.set_xticklabels([f"{tick:.1f}" for tick in ax.get_xticks()])
-            # ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
-            ax.set_yticklabels([f"{tick:.1f}" for tick in ax.get_yticks()])
+            ax.set_xticks(ax.get_xticks()[::2])  # Show every second xtick
+            ax.set_xticklabels([f"{tick:.0f}" for tick in ax.get_xticks()])
+            ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
+            ax.set_yticklabels([f"{tick:.0f}" for tick in ax.get_yticks()])
             if group == "NLU" and metric == "train_energy_mean":
-                ax.legend()
+                ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.5), ncol=1)
             cols[col].pyplot(fig)
+
+
+def the_mother_table():
+
+    df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
+    base = get_base_model_performance(df)
+    df = get_base_table(df, add_cols=["savings"])
+    df.rename(columns={"savings": "param"}, inplace=True)
+    df["approach"] = "stochastic"
+    base["savings"] = "base"
+    base["approach"] = "base"
+    base.rename(columns={"savings": "param"}, inplace=True)
+    df = pd.concat([df, base], ignore_index=True)
+
+    gt = pd.read_csv(os.path.join(BASE_DIR, "green_trainer/results.csv"))
+    gt = get_base_table(gt, add_cols=["rho"])
+    gt = gt.rename(columns={"rho": "param"})
+    gt["approach"] = "green_trainer"
+    df = pd.concat([df, gt], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["param"] = 17 - fl["nlayer"]
+    fl = fl.drop(columns=["nlayer"])
+    fl["approach"] = "static"
+    df = pd.concat([df, fl], ignore_index=True)
+    st.write(df)
+
+    for col in df.columns:
+        if "flops" in col:
+            # pFLOPs
+            df[col] /= 1e15
+        if "energy" in col:
+            # kJ
+            df[col] /= 1e3
+
+    for dataset in df["dataset"].unique():
+        for metric in ["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]:
+            base_value = df.loc[(df["dataset"] == dataset) & (df["param"] == 1), metric].values[0]
+            df.loc[df["dataset"] == dataset, f"{metric}_reduction (%)"] = (
+                (base_value - df.loc[df["dataset"] == dataset, metric]) / base_value * 100
+            )
+
+    df = df.melt(
+        id_vars=["dataset", "approach", "param"],
+        value_vars=[
+            "train_energy_mean",
+            "train_time_mean",
+            "total_flops_mean",
+            "train_energy_sem",
+            "train_time_sem",
+            "performance",
+            "performance_sem",
+            "performance_reduction (%)",
+            "train_energy_mean_reduction (%)",
+            "train_time_mean_reduction (%)",
+            "total_flops_mean_reduction (%)",
+        ],
+        var_name="metric",
+        value_name="value",
+    )
+    df = df.pivot_table(
+        index=["approach", "param", "metric"], columns="dataset", values="value", aggfunc="first"
+    ).reset_index()
+
+    st.write(df)
+
+    for i, row in df.iterrows():
+        if "_sem" in row["metric"]:
+            sem_vals = row.values[3:]
+            value_row_name = (
+                row["metric"].replace("_sem", "_mean")
+                if not "performance" in row["metric"]
+                else row["metric"].replace("_sem", "")
+            )
+            mask = (df["metric"] == value_row_name) & (df["approach"] == row["approach"]) & (df["param"] == row["param"])
+            if any(mask):
+                value_vals = df.loc[mask].values[0][3:]
+                df.iloc[mask, 3:] = [
+                    f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+                    for value, sem in zip(value_vals, sem_vals)
+                ]
+        else:
+            df.loc[i, df.columns[3:]] = [f"{value:.2f}" if pd.notnull(value) else "N/A" for value in row.values[3:]]
+    df = df[~df["metric"].str.endswith("_sem")]
+    df["approach"] = df["approach"].replace(
+        {
+            "stochastic": "Top-LoRA Stochastic",
+            "green_trainer": "Green Trainer",
+            "static": "Top-LoRA Static",
+            "base": "Pre-Trained Model",
+        }
+    )
+
+    st.write(df)
 
 
 if __name__ == "__main__":
@@ -656,5 +793,11 @@ if __name__ == "__main__":
     st.write("---")
     green_trainer_table(0.5)
 
-    # st.write("---")
+    st.write("---")
+    green_trainer_table(0.75)
+
+    st.write("---")
     the_mother_pareto_front()
+
+    st.write("---")
+    the_mother_table()

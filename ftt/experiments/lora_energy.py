@@ -79,17 +79,18 @@ def energy_eval_lora(model_name, rank, input_length, batch_size, num_samples, nu
             for i, batch in Monitor().tqdm(
                 enumerate(dataloader), desc="Evaluating energy metrics", total=num_samples + num_warumup_samples
             ):
-
-                if i < num_warumup_samples:
-                    continue
-                batch = {k: v.to(model.device) for k, v in batch.items()}
-
-                with prof.record_context("forward"):
+                is_warmup = i < num_warumup_samples
+                with prof.record_context("forward" if is_warmup else "warmup_forward"):
+                    batch = {k: v.to(model.device) for k, v in batch.items()}
                     outputs = model(**batch)
-                with prof.record_context("backward"):
+                    torch.cuda.synchronize()
+                with prof.record_context("backward" if is_warmup else "warmup_backward"):
                     outputs.loss.backward()
-                with prof.record_context("optimizer"):
+                    torch.cuda.synchronize()
+                with prof.record_context("optimizer" if is_warmup else "warmup_optimizer"):
                     optimizer.step()
+                    optimizer.zero_grad()
+                    torch.cuda.synchronize()
         energy_metrics = dict()
         energy_metrics["forward_joules"] = prof.get_total_energy(record_steps=["forward"])
         energy_metrics["forward_backward_joules"] = prof.get_total_energy(record_steps=["forward", "backward"])
@@ -156,8 +157,8 @@ if __name__ == "__main__":
     out_file = args.out_file
     models = [args.model_name]
     input_lengths = [256]
-    batch_sizes = [20, 16, 12, 8, 4]
-    ranks = [-1, 8, 1, 4, 16, 32] + list(range(64, 512 + 64, 64))
+    batch_sizes = [16, 12, 8, 4]
+    ranks = [-1, 8, 1, 4, 16, 32]  # + list(range(64, 512 + 64, 64))
     repetitions = list(range(10))
     grid = list(product(repetitions, batch_sizes, models, input_lengths, ranks))
 
