@@ -4,6 +4,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Define color palette for plots
 colors = {
     "blueish": "#2574a9",
     "greenish": "#74a925",
@@ -13,32 +14,37 @@ colors = {
 
 
 def plot():
-
+    # Load main energy results CSV
     df = pd.read_csv("ftt/out/energy/energy_lora_a100_combined.csv")
     models = df["model_name"].unique()
+    # Sidebar model selection
     model_select = st.sidebar.selectbox("Select Model", models, index=0)
 
+    # Filter for selected model
     df = df[df["model_name"] == model_select]
     df = df.drop(columns=["model_name"])
+    # Group by rank, batch_size, input_length and aggregate mean and sem
     df = (
         df.groupby(["rank", "batch_size", "input_length"])
         .agg({col: ("mean", "sem") for col in df.columns if col not in ["rank", "batch_size", "input_length"]})
         .reset_index()
     )
+    # Flatten multi-level columns
     df.columns = ["_".join(col).strip() for col in df.columns.values]
-    # remove suffixing _ from columns
+    # Remove trailing underscores from column names
     df.columns = [col[:-1] if col.endswith("_") else col for col in df.columns]
 
+    # Unit conversions for energy and FLOPs
     for col in df.columns:
         if "energy" in col or "joules" in col:
-            # convert energy columns from Joules to kJ
-            df[col] = df[col].astype(float) / 1000.0
+            df[col] = df[col].astype(float) / 1000.0  # Joules to kJ
         if "flops" in col:
-            # convert FLOPs to GFLOPs (1e13 is right here since we also have to multiply by 100)
-            df[col] = df[col].astype(float) / 1e13
+            df[col] = df[col].astype(float) / 1e13  # FLOPs to GFLOPs
 
+    # Filter for comparison plot (FFT vs LoRA r=8)
     cmp_df = df[(df["rank"].isin([-1, 8]) & (df["batch_size"] == 16)) & (df["input_length"] == 256)]
 
+    # Plot bar charts for joules, flops, and time
     cols = st.columns(3, vertical_alignment="bottom")
     for i, metric in enumerate(["joules", "flops", "time"]):
         with cols[i]:
@@ -55,8 +61,7 @@ def plot():
                 + cmp_df[[f"forward_backward_{metric}_sem"]].values ** 2
                 + forward_errors**2
             )
-            # each of the values contains two elements the first for fft and the second for lora r = 8
-            # create var plot to compare each group of fft and lora
+            # Plot bars for FFT and LoRA r=8
             fig, ax = plt.subplots(figsize=(4, 3))
             for i in range(len(forward_values)):
                 ax.bar(
@@ -70,14 +75,12 @@ def plot():
             ax.set_xticks(np.arange(len(groups)) + 0.3 * (len(cmp_df) - 1) / 2)
             ax.set_xticklabels(groups)
             ax.set_ylabel("Energy (kJ)" if metric == "joules" else "GFLOPs" if metric == "flops" else "Time (s)")
-            # ax.set_yticks(ax.get_yticks()[::1])  # Show every second ytick
-            # ax.set_yticklabels([f"{tick:0}" for tick in ax.get_yticks()])
-            # set y min to 0
             ax.set_ylim(bottom=0)
             if metric == "flops":
                 ax.legend(title="", loc="upper center", bbox_to_anchor=(0.5, 1.2), ncol=2)
             st.pyplot(fig)
 
+    # Efficiency plots: GFLOPs/Joule and GFLOPs/Second
     eff_df = df[(df["rank"].isin([-1, 8, 32, 64])) & (df["input_length"] == 256)]
     eff_df = eff_df.set_index(["rank", "batch_size"])
     drop_cols = [col for col in eff_df.columns if not "forward_backward_optimizer" in col]
@@ -87,7 +90,7 @@ def plot():
     eff_df["flops_per_joule_sem"] = eff_df["joules_sem"]
     eff_df["flops_per_second_mean"] = eff_df["flops_mean"] / eff_df["time_mean"]
     eff_df["flops_per_second_sem"] = eff_df["time_sem"]
-    # create a line plot with batch size on x and flops_per_joule on y
+    # Line plots for efficiency metrics
     cols = st.columns(2)
     for i, metric in enumerate(["flops_per_joule", "flops_per_second"]):
         with cols[i]:
@@ -115,11 +118,14 @@ def plot():
             plt.yticks(fontsize=12)
             st.pyplot(fig)
 
+    # Load memory results CSV
     df = pd.read_csv("ftt/out/energy/energy_lora_a100_w_memory.csv")
     models = df["model_name"].unique()
 
+    # Filter for selected model and drop mean columns
     df = df[df["model_name"] == model_select]
     df = df.drop(columns=["model_name"] + [col for col in df.columns if "mean" in col])
+    # Group and aggregate mean and sem
     df = (
         df.groupby(["rank", "batch_size", "input_length"])
         .agg({col: ("mean", "sem") for col in df.columns if col not in ["rank", "batch_size", "input_length"]})
@@ -128,26 +134,25 @@ def plot():
     df.columns = ["_".join(col).strip() for col in df.columns.values]
     df.columns = [col[:-1] if col.endswith("_") else col for col in df.columns]
 
+    # Unit conversions for memory, parameters, etc.
     for col in df.columns:
         if "energy" in col or "joules" in col:
-            # convert energy columns from Joules to kJ
-            df[col] = df[col].astype(float) / 1000.0
+            df[col] = df[col].astype(float) / 1000.0  # Joules to kJ
         if "flops" in col:
-            # convert FLOPs to TerraFLOPs
-            df[col] = df[col].astype(float) / 1e13
+            df[col] = df[col].astype(float) / 1e13  # FLOPs to GFLOPs
         if "num_trainable_parameters" in col:
-            # convert number of parameters to millions
-            df[col] = df[col].astype(float) / 1e6
+            df[col] = df[col].astype(float) / 1e6  # Params to millions
         if "memory" in col:
-            # convert memory to MB->GB
-            df[col] = df[col].astype(float) / 1024.0
+            df[col] = df[col].astype(float) / 1024.0  # MB to GB
 
+    # Prepare summary table for selected ranks, batch size, and input length
     tbl_df = df[(df["rank"].isin([-1, 64, 32, 8, 1])) & (df["input_length"] == 256) & (df["batch_size"] == 16)]
     tbl_df = tbl_df.set_index(["rank"]).drop(columns=["input_length", "batch_size"])
     tbl_df = tbl_df[[col for col in tbl_df.columns if "forward_backward_optimizer" in col or "parameters" in col]]
     tbl_df = tbl_df.reset_index()
     values = tbl_df[[col for col in tbl_df.columns if "mean" in col or "rank" in col]]
     sems = tbl_df[[col for col in tbl_df.columns if "sem" in col or "rank" in col]]
+    # Format values and calculate reduction percentages
     for col in sems.columns:
         if col == "rank":
             continue
@@ -159,10 +164,10 @@ def plot():
         values[val_col] = values[val_col].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
         sems[col] = sems[col].apply(lambda x: f" ({x:.2f})" if isinstance(x, (int, float)) else x)
         if not ("memory" in col or "parameters" in col or "flops" in col):
-            # sems[col] = ""
             values[val_col] = values[val_col] + sems[col] + " " + reduction
         else:
             values[val_col] = values[val_col] + " " + reduction
+    # Rename columns for display
     values.columns = [col.replace("forward_backward_optimizer_", "") for col in values.columns]
     values = values.rename(
         columns={
@@ -176,7 +181,7 @@ def plot():
     )
     values = values[["Rank", "Params", "Mem. (GB)", "Time (s)", "GFLOPs", "Energy (kJ)"]]
     values.loc[values["Rank"] == -1, "Rank"] = "FFT"
-    # sort rows in order FFT, 64 , 32, 8, 1
+    # Sort rows in order FFT, 64, 32, 8, 1
     values = values.sort_values(by=["Rank"], key=lambda x: x.astype(str).map({"FFT": 0, "64": 1, "32": 2, "8": 3, "1": 4}))
     st.write(values)
     str_values = values.to_string(index=False, justify="left")
@@ -184,7 +189,7 @@ def plot():
 
 
 if __name__ == "__main__":
-
+    # Streamlit entry point
     # streamlit run ./ftt/results/plotting/lora_energy_plots.py --server.fileWatcherType=poll
     st.set_page_config(
         page_title="LoRA Energy Plots",
