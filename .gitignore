@@ -1,4 +1,4 @@
 .env
 **/out/**
 **/__pycache__/**
-!ftt/out
+!ftt/out/**
