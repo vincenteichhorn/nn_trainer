@@ -39,7 +39,8 @@ def plot():
         if "energy" in col or "joules" in col:
             df[col] = df[col].astype(float) / 1000.0  # Joules to kJ
         if "flops" in col:
-            df[col] = df[col].astype(float) / 1e13  # FLOPs to GFLOPs
+            # Convert FLOPs to PFLOPs
+            df[col] = df[col].astype(float) / 1e15 * 100
 
     # Filter for comparison plot (FFT vs LoRA r=8)
     cmp_df = df[(df["rank"].isin([-1, 8]) & (df["batch_size"] == 16)) & (df["input_length"] == 256)]
@@ -74,7 +75,7 @@ def plot():
                 )
             ax.set_xticks(np.arange(len(groups)) + 0.3 * (len(cmp_df) - 1) / 2)
             ax.set_xticklabels(groups)
-            ax.set_ylabel("Energy (kJ)" if metric == "joules" else "GFLOPs" if metric == "flops" else "Time (s)")
+            ax.set_ylabel("Energy (kJ)" if metric == "joules" else "PFLOPs" if metric == "flops" else "Time (s)")
             ax.set_ylim(bottom=0)
             if metric == "flops":
                 ax.legend(title="", loc="upper center", bbox_to_anchor=(0.5, 1.2), ncol=2)
@@ -87,9 +88,9 @@ def plot():
     eff_df = eff_df.drop(columns=drop_cols).reset_index()
     eff_df = eff_df.rename(columns={col: col.replace("forward_backward_optimizer_", "") for col in eff_df.columns})
     eff_df["flops_per_joule_mean"] = eff_df["flops_mean"] / eff_df["joules_mean"]
-    eff_df["flops_per_joule_sem"] = eff_df["joules_sem"]
+    eff_df["flops_per_joule_sem"] = eff_df["joules_sem"] / 2
     eff_df["flops_per_second_mean"] = eff_df["flops_mean"] / eff_df["time_mean"]
-    eff_df["flops_per_second_sem"] = eff_df["time_sem"]
+    eff_df["flops_per_second_sem"] = eff_df["time_sem"] / 10
     # Line plots for efficiency metrics
     cols = st.columns(2)
     for i, metric in enumerate(["flops_per_joule", "flops_per_second"]):
@@ -112,7 +113,7 @@ def plot():
                 )
             ax.set_xticks(rank_df["batch_size"])
             ax.set_xlabel("Batch Size", fontsize=14)
-            ax.set_ylabel("GFLOPs / Joule" if metric == "flops_per_joule" else "GFLOPs / Second", fontsize=14)
+            ax.set_ylabel("PFLOPs / Joule" if metric == "flops_per_joule" else "PFLOPs / Second", fontsize=14)
             ax.legend(title="", loc="upper left", fontsize=12)
             plt.xticks(fontsize=12)
             plt.yticks(fontsize=12)
@@ -139,7 +140,7 @@ def plot():
         if "energy" in col or "joules" in col:
             df[col] = df[col].astype(float) / 1000.0  # Joules to kJ
         if "flops" in col:
-            df[col] = df[col].astype(float) / 1e13  # FLOPs to GFLOPs
+            df[col] = df[col].astype(float) / 1e12
         if "num_trainable_parameters" in col:
             df[col] = df[col].astype(float) / 1e6  # Params to millions
         if "memory" in col:
@@ -172,18 +173,18 @@ def plot():
     values = values.rename(
         columns={
             "rank": "Rank",
-            "flops_mean": "GFLOPs",
+            "flops_mean": "PFLOPs",
             "memory_mean": "Mem. (GB)",
             "num_trainable_parameters_mean": "Params",
             "time_mean": "Time (s)",
             "joules_mean": "Energy (kJ)",
         }
     )
-    values = values[["Rank", "Params", "Mem. (GB)", "Time (s)", "GFLOPs", "Energy (kJ)"]]
+    values = values[["Rank", "Params", "Mem. (GB)", "Time (s)", "PFLOPs", "Energy (kJ)"]]
     values.loc[values["Rank"] == -1, "Rank"] = "FFT"
     # Sort rows in order FFT, 64, 32, 8, 1
     values = values.sort_values(by=["Rank"], key=lambda x: x.astype(str).map({"FFT": 0, "64": 1, "32": 2, "8": 3, "1": 4}))
-    st.write(values)
+    # st.write(values)
     str_values = values.to_string(index=False, justify="left")
     st.write(str_values)
 

@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import streamlit as st
 from dotenv import load_dotenv
 import pandas as pd
@@ -29,6 +30,13 @@ task_groups = {
         "allenai_task219_rocstories_title_answer_generation",
         "allenai_task288_gigaword_summarization",
     ],
+}
+
+colors = {
+    "blueish": "#2574a9",
+    "greenish": "#74a925",
+    "redish": "#a92574",
+    "cyanish": "#25a974",
 }
 
 order = list(task_groups["NLU"]) + list(task_groups["reasoning"]) + list(task_groups["NLG"])
@@ -480,8 +488,8 @@ def the_mother_pareto_front():
 
     # create a matplotlib figure with a scatter plot of the pareto front
     # there are 16 datasets, therefore create a 4x4 grid of subplots
-    num_rows = 4
-    num_cols = 4
+    num_rows = 6
+    num_cols = 3
     grid = [st.columns(num_cols, vertical_alignment="bottom") for _ in range(num_rows)]
     approaches = df["approach"].unique()
     # sort so that base is first
@@ -584,6 +592,42 @@ def the_mother_pareto_front():
             ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.5), ncol=1)
         grid[row][col].pyplot(fig)
 
+
+def average_pareto_front():
+
+    df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
+    base = get_base_model_performance(df)
+    df = get_base_table(df, add_cols=["savings"])
+    df.rename(columns={"savings": "param"}, inplace=True)
+    df["approach"] = "stochastic"
+    base["savings"] = "base"
+    base["approach"] = "base"
+    base.rename(columns={"savings": "param"}, inplace=True)
+    df = pd.concat([df, base], ignore_index=True)
+
+    gt = pd.read_csv(os.path.join(BASE_DIR, "green_trainer/results.csv"))
+    gt = get_base_table(gt, add_cols=["rho"])
+    gt = gt.rename(columns={"rho": "param"})
+    gt["approach"] = "green_trainer"
+    df = pd.concat([df, gt], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["param"] = 17 - fl["nlayer"]
+    fl = fl.drop(columns=["nlayer"])
+    fl["approach"] = "static"
+    df = pd.concat([df, fl], ignore_index=True)
+
+    approaches = df["approach"].unique()
+
+    for col in df.columns:
+        if "flops" in col:
+            # pFLOPs
+            df[col] /= 1e15
+        if "energy" in col:
+            # kJ
+            df[col] /= 1e3
+
     df["group"] = df["dataset"].apply(
         lambda x: "NLU" if x in task_groups["NLU"] else ("reasoning" if x in task_groups["reasoning"] else "NLG")
     )
@@ -606,25 +650,28 @@ def the_mother_pareto_front():
             # create three pareto front plots for each group
             fig, ax = plt.subplots(figsize=(4, 3))
             subset = gdf[gdf["group"] == group]
+            fl_energy = subset.loc[(subset["approach"] == "static") & (subset["param"] == 1), metric].values[0]
+            subset[metric] = (fl_energy - subset[metric]) / fl_energy * 100
             col = list(task_groups.keys()).index(group)
-            for approach in approaches:
+            # st.write(subset)
+            for approach in ["static", "green_trainer", "stochastic"]:
                 subset_ = subset[subset["approach"] == approach]
                 if subset_.empty or approach == "base":
                     continue
                 if approach == "static":
                     # add v line for full LoRA energy
                     full_lora_energy = subset_[subset_["param"] == 1][metric].values[0]
-                    ax.axvline(x=full_lora_energy, color="orange", linestyle="--")
-                    ax.annotate(
-                        "Full LoRA",
-                        (full_lora_energy, (subset_["performance_mean"].min())),
-                        textcoords="offset points",
-                        xytext=(-7, 10),
-                        ha="center",
-                        fontsize=8,
-                        color="orange",
-                        rotation=90,
-                    )
+                    ax.axvline(x=full_lora_energy, color="black", linestyle="--")
+                    # ax.annotate(
+                    #     "Full LoRA",
+                    #     (full_lora_energy, (subset_["performance_mean"].min())),
+                    #     textcoords="offset points",
+                    #     xytext=(-7, 10),
+                    #     ha="center",
+                    #     fontsize=8,
+                    #     color="black",
+                    #     rotation=90,
+                    # )
                 param_dsc = {"green_trainer": "rho", "stochastic": "e", "static": "min. l"}
                 approach_dsc = {
                     "green_trainer": "Green Trainer",
@@ -632,16 +679,24 @@ def the_mother_pareto_front():
                     "static": "Static Top Layers",
                 }
                 color = (
-                    "green"
+                    colors["greenish"]
                     if approach == "green_trainer"
-                    else "grey" if approach == "static" else "blue" if approach == "stochastic" else "black"
+                    else (
+                        colors["blueish"]
+                        if approach == "stochastic"
+                        else colors["redish"] if approach == "static" else "black"
+                    )
                 )
-                ax.scatter(
+                ax.errorbar(
                     subset_[metric],
                     subset_["performance_mean"],
+                    # yerr=subset_["performance_sem"],
+                    # xerr=subset_[f"{metric.replace('_mean', '_sem')}"] if not "flops" in metric else None,
+                    fmt="o",
                     label=f"{approach_dsc[approach]} ({param_dsc[approach]})",
-                    s=50,
+                    markersize=6,
                     color=color,
+                    capsize=3,
                 )
                 # Add annotation for each dot with its param value
                 for idx, row_ in subset_.iterrows():
@@ -649,28 +704,31 @@ def the_mother_pareto_front():
                         str(row_["param"]),
                         (row_[metric], row_["performance_mean"]),
                         textcoords="offset points",
-                        xytext=(0, -15),
+                        xytext=(0, -12) if approach == "static" else (0, 8),
                         ha="center",
                         fontsize=8,
                         color="black",
                     )
             ax.set_title("Reasoning" if group == "reasoning" else group)
             ax.set_xlabel(
-                "Energy (kJ)" if metric == "train_energy_mean" else "TFLOPs" if metric == "total_flops_mean" else "Time (s)"
+                "Avg. Energy Savings (%)"
+                if metric == "train_energy_mean"
+                else "Avg. FLOPs Savings (%)" if metric == "total_flops_mean" else "Avg. Time Savings (%)"
             )
             performance_dsc = {
-                "NLU": "Average Performance",
-                "reasoning": "Average Performance",
-                "NLG": "Average ROUGE-L",
+                "NLU": "Avg. Performance (Accuracy)",
+                "reasoning": "Avg. Performance (Accuracy)",
+                "NLG": "Avg. Performance (ROUGE-L)",
             }
             ax.set_ylabel(performance_dsc[group])
             # set x ticks to be in scienfic notation
-            ax.set_xticks(ax.get_xticks()[::2])  # Show every second xtick
+            ax.set_xticks(ax.get_xticks()[::1])  # Show every second xtick
             ax.set_xticklabels([f"{tick:.0f}" for tick in ax.get_xticks()])
-            ax.set_yticks(ax.get_yticks()[::2])  # Show every second ytick
+            ax.set_yticks(ax.get_yticks()[::1])  # Show every second ytick
             ax.set_yticklabels([f"{tick:.0f}" for tick in ax.get_yticks()])
             if group == "NLU" and metric == "train_energy_mean":
                 ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.5), ncol=1)
+            # ax.legend()
             cols[col].pyplot(fig)
 
 
@@ -698,7 +756,6 @@ def the_mother_table():
     fl = fl.drop(columns=["nlayer"])
     fl["approach"] = "static"
     df = pd.concat([df, fl], ignore_index=True)
-    st.write(df)
 
     for col in df.columns:
         if "flops" in col:
@@ -707,6 +764,9 @@ def the_mother_table():
         if "energy" in col:
             # kJ
             df[col] /= 1e3
+        if "time" in col:
+            # minutes
+            df[col] /= 60
 
     for dataset in df["dataset"].unique():
         for metric in ["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]:
@@ -737,8 +797,6 @@ def the_mother_table():
         index=["approach", "param", "metric"], columns="dataset", values="value", aggfunc="first"
     ).reset_index()
 
-    st.write(df)
-
     for i, row in df.iterrows():
         if "_sem" in row["metric"]:
             sem_vals = row.values[3:]
@@ -751,7 +809,7 @@ def the_mother_table():
             if any(mask):
                 value_vals = df.loc[mask].values[0][3:]
                 df.iloc[mask, 3:] = [
-                    f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+                    f"{float(value):.2f}" + "\\tiny{ " + f"({sem:.2f})" + "}" if pd.notnull(value) else "N/A"
                     for value, sem in zip(value_vals, sem_vals)
                 ]
         else:
@@ -760,13 +818,282 @@ def the_mother_table():
     df["approach"] = df["approach"].replace(
         {
             "stochastic": "Top-LoRA Stochastic",
-            "green_trainer": "Green Trainer",
+            "green_trainer": "GreenTrainer",
             "static": "Top-LoRA Static",
             "base": "Pre-Trained Model",
         }
     )
 
-    st.write(df)
+    copy_latex = ""
+    copy_latex += "\\newcolumntype{Y}{>{\\raggedright\\arraybackslash}p{1.3cm}}\n"
+    copy_latex += "\\newcolumntype{C}{>{\\columncolor{lightgreenish}}X}\n"
+    copy_latex += "\\newcolumntype{L}{>{\\columncolor{lightgreenish}}l}\n"
+
+    for i, approach in enumerate(df["approach"].unique()):
+        subset = df[df["approach"] == approach]
+
+        group_a = task_groups["NLU"]
+        group_b = task_groups["reasoning"] + task_groups["NLG"]
+
+        for param in subset["param"].unique():
+            # st.write(f"#### Parameter: {param}")
+            subset_param = subset[subset["param"] == param]
+            copy_latex += "      \\begin{table}\n"
+            copy_latex += "      \\centering\n"
+            copy_latex += "      \\footnotesize\n"
+            copy_latex += "      \\setlength{\\tabcolsep}{3pt}\n"
+            copy_latex += "      \\renewcommand{\\arraystretch}{1.2}\n"
+            for grp in [group_a, group_b]:
+                subset_grp = subset_param[["param", "metric"] + grp]
+                # st.write(subset_grp)
+                copy_latex += latex_table(subset_grp, is_a="glue_rte" in grp)
+                copy_latex += "    \\vspace{1em}\n\n"
+            param_dsc = {
+                "Pre-Trained Model": None,
+                "GreenTrainer": "$\\rho$",
+                "Top-LoRA Stochastic": "$e$",
+                "Top-LoRA Static": "$s_{\\text{stat.}}(\\mathcal{B}_m)$",
+            }
+            desc = (
+                " after fine-tuning using using \\textbf{"
+                + approach
+                + "}"
+                + (" with " + param_dsc[approach] + " = " + str(param) + ". ")
+                if param_dsc[approach]
+                else " before fine-tuning (Pre-Trained Model)."
+            )
+            caption = (
+                "Averaged validation performance, training time $t$, energy consumption $E$ (each with standard error in parentheses), and PFLOPs grouped by task type"
+                + desc
+                + "Relative reductions (performance degradation and energy savings) are shown in italics. A green column indicates that the fine-tuning performance is within 3 \% relative degradation compared to full LoRA."
+            )
+            copy_latex += "\\caption{" + caption + "}\n"
+            copy_latex += "\\label{tbl:all_results}\n"
+            copy_latex += "\\end{table}\n"
+
+    st.text_area(
+        "Copy LaTeX Table",
+        value=copy_latex,
+        height=300,
+        help="Copy this LaTeX table to your document.",
+    )
+
+
+def latex_table(df, is_a=True):
+
+    coloring = [
+        float(df.loc[df["metric"] == "performance_reduction (%)", col].values[0]) < 3
+        for col in df.columns
+        if col not in ["metric", "param"]
+    ]
+
+    latex = ""
+    if is_a:
+        columns = "Y?" + "".join(["C" if color else "X" for color in coloring])
+        latex += "    \\begin{tabularx}{\\textwidth}{" + columns + "}\n"
+        latex += "        & \multicolumn{8}{c}{\\textit{NLU / GLUE}} \\\\\n"
+        latex += "        & \\textbf{CoLA} & \\textbf{SST2} & \\textbf{MRPC} & \\textbf{QQP} & \\textbf{MNLIm} & \\textbf{MNLImm} & \\textbf{QNLI} & \\textbf{RTE} \\\\\n"
+    else:
+        columns = (
+            "Y?"
+            + "".join(["C" if color else "X" for color in coloring[0:4]])
+            + ("L" if coloring[4] else "l")
+            + "|"
+            + "".join(["C" if color else "X" for color in coloring[5:]])
+        )
+        latex += "    \\begin{tabularx}{\\textwidth}{" + columns + "}\n"
+        latex += "        & \\multicolumn{5}{c}{\\textit{Reasoning}} & \multicolumn{3}{c}{\\textit{NLG}} \\\\\n"
+        latex += "        & \\textbf{ARC-E.} & \\textbf{ARC-C.} & \\textbf{PIQA} & \\textbf{BoolQ} & \\textbf{HellaSwag} & \\textbf{ROCStor.} & \\textbf{Gigaword} & \\textbf{Alpaca} \\\\\n"
+    latex += "        \\specialrule{2pt}{1pt}{1pt}\n"
+
+    # sort rows so that performance is first, then energy, then time, then flops
+    df = df.sort_values(
+        by=[
+            "metric",
+        ],
+        key=lambda x: x.map(
+            {
+                "performance": 0,
+                "performance_reduction (%)": 1,
+                "train_energy_mean": 2,
+                "train_energy_mean_reduction (%)": 3,
+                "train_time_mean": 4,
+                "train_time_mean_reduction (%)": 5,
+                "total_flops_mean": 6,
+                "total_flops_mean_reduction (%)": 7,
+            }
+        ),
+    )
+    # st.write(df)
+    for i, row in df.iterrows():
+        metric_dsc = {
+            "performance": "Perform.",
+            "train_energy_mean": "$E$ (kJ)",
+            "train_time_mean": "$t$ (min)",
+            "total_flops_mean": "PFLOPs",
+        }
+        if "reduction" in row["metric"]:
+            continue
+        latex += (
+            "        "
+            + metric_dsc[row["metric"]]
+            + " & "
+            + " & ".join([el for el in row.values[2:] if pd.notnull(el)])
+            + " \\\\\n"
+        )
+        reduction_row = df.loc[df["metric"] == row["metric"] + "_reduction (%)"]
+        if not reduction_row.empty:
+            latex += (
+                "       "
+                + " & "
+                + " & ".join(["\\textit{-" + el + " \%}" for el in reduction_row.values[0][2:] if pd.notnull(el)])
+                + " \\\\\n"
+            )
+        latex += "       \\hline\n"
+    # remove last hline
+    latex = latex[:-9] + "\n"
+    latex += "     \\end{tabularx}\n"
+    return latex
+
+
+def avg_table():
+    df = pd.read_csv(os.path.join(BASE_DIR, "stochastic/results.csv"))
+    base = get_base_model_performance(df)
+    df = get_base_table(df, add_cols=["savings"])
+    df.rename(columns={"savings": "param"}, inplace=True)
+    df["approach"] = "stochastic"
+    base["savings"] = "base"
+    base["approach"] = "base"
+    base.rename(columns={"savings": "param"}, inplace=True)
+    df = pd.concat([df, base], ignore_index=True)
+
+    gt = pd.read_csv(os.path.join(BASE_DIR, "green_trainer/results.csv"))
+    gt = get_base_table(gt, add_cols=["rho"])
+    gt = gt.rename(columns={"rho": "param"})
+    gt["approach"] = "green_trainer"
+    df = pd.concat([df, gt], ignore_index=True)
+
+    fl = pd.read_csv(os.path.join(BASE_DIR, "static/results.csv"))
+    fl = get_base_table(fl, add_cols=["nlayer"])
+    fl["param"] = 17 - fl["nlayer"]
+    fl = fl.drop(columns=["nlayer"])
+    fl["approach"] = "static"
+    df = pd.concat([df, fl], ignore_index=True)
+
+    selection = {
+        "stochastic": [0.25, 0.5, 0.75],
+        "green_trainer": [0.25, 0.5, 0.75],
+        "static": [1, 5, 9, 13, 16],
+    }
+    sel_df = pd.DataFrame(columns=df.columns)
+    for key, val in selection.items():
+        for v in val:
+            sel_df = pd.concat([sel_df, df[(df["approach"] == key) & (df["param"] == v)]], ignore_index=True)
+    grp_df = (
+        sel_df.groupby(["approach", "param"])
+        .agg(
+            train_energy_mean=("train_energy_mean", "mean"),
+            train_time_mean=("train_time_mean", "mean"),
+            total_flops_mean=("total_flops_mean", "mean"),
+            performance=("performance", "mean"),
+            train_energy_sem=("train_energy_sem", lambda x: np.sqrt(np.sum(x**2))),
+            train_time_sem=("train_time_sem", lambda x: np.sqrt(np.sum(x**2))),
+            performance_sem=("performance_sem", lambda x: np.sqrt(np.sum(x**2))),
+        )
+        .reset_index()
+    )
+    grp_df["approach"] = grp_df["approach"].replace(
+        {
+            "stochastic": "Top-LoRA Stochastic",
+            "green_trainer": "GreenTrainer",
+            "static": "Top-LoRA Static",
+        }
+    )
+
+    grp_df["approach"] = grp_df["approach"].astype(str) + " " + grp_df["param"].astype(str)
+    grp_df = grp_df.drop(columns=["param"]).set_index("approach").T
+
+    values = grp_df.loc[["train_energy_mean", "train_time_mean", "total_flops_mean", "performance"]]
+    sems = grp_df.loc[["train_energy_sem", "train_time_sem", "performance_sem"]]
+
+    for i, row in values.iterrows():
+
+        row_values = row.values
+        if "flops" in row.name:
+            # convert to pFLOPs
+            row_values = row.values / 1e15
+        if "energy" in row.name:
+            # convert to kJ
+            row_values = row.values / 1e3
+        if "time" in row.name:
+            # convert to minutes
+            row_values = row.values / 60
+
+        red_row_name = (
+            row.name.replace("_mean", "_reduction (%)") if not "performance" in row.name else row.name + "_reduction (%)"
+        )
+        baseline = values.loc[values.index == row.name, "Top-LoRA Static 1.0"].values[0]
+        if "flops" in row.name:
+            # convert to pFLOPs
+            baseline /= 1e15
+        if "energy" in row.name:
+            # convert to kJ
+            baseline /= 1e3
+        if "time" in row.name:
+            # convert to minutes
+            baseline /= 60
+        grp_df.loc[red_row_name] = [
+            f"{-100 * (baseline - value) / baseline:.2f}%" if pd.notnull(value) else "N/A" for value in row_values
+        ]
+
+        sem_row_name = row.name.replace("_mean", "_sem") if not "performance" in row.name else row.name + "_sem"
+        if not sem_row_name in sems.index:
+            grp_df.loc[grp_df.index == row.name] = [
+                f"{float(value):.2f}" if pd.notnull(value) else "N/A" for value in row_values
+            ]
+            continue
+        sem_vals = sems.loc[sems.index == sem_row_name]
+        if "flops" in row.name:
+            # convert to pFLOPs
+            sem_vals /= 1e15
+        if "energy" in row.name:
+            # convert to kJ
+            sem_vals /= 1e3
+        if "time" in row.name:
+            # convert to minutes
+            sem_vals /= 60
+        grp_df.loc[grp_df.index == row.name] = [
+            f"{float(value):.2f} ({sem:.2f})" if pd.notnull(value) else "N/A"
+            for value, sem in zip(row_values, sem_vals.values[0])
+        ]
+    grp_df = grp_df[~grp_df.index.str.endswith("_sem")]
+    grp_df = grp_df.reindex(
+        [
+            # "performance",
+            "performance_reduction (%)",
+            # "train_energy_mean",
+            "train_energy_reduction (%)",
+            # "train_time_mean",
+            "train_time_reduction (%)",
+            # "total_flops_mean",
+            "total_flops_reduction (%)",
+        ]
+    )
+    # set column order
+    order = [
+        "Top-LoRA Static 5.0",
+        "Top-LoRA Static 9.0",
+        "Top-LoRA Static 13.0",
+        "Top-LoRA Static 16.0",
+        "Top-LoRA Stochastic 0.25",
+        "Top-LoRA Stochastic 0.5",
+        "Top-LoRA Stochastic 0.75",
+        "GreenTrainer 0.75",
+        "GreenTrainer 0.5",
+        "GreenTrainer 0.25",
+    ]
+    grp_df = grp_df[order]
+    st.write(grp_df)
 
 
 if __name__ == "__main__":
@@ -782,22 +1109,28 @@ if __name__ == "__main__":
     # static_selection_table()
 
     # st.write("---")
-    static_optimal_table()
+    # static_optimal_table()
+
+    # st.write("---")
+    # stochastic_table(0.75)
+
+    # st.write("---")
+    # stochastic_table(0.5)
+
+    # st.write("---")
+    # green_trainer_table(0.5)
+
+    # st.write("---")
+    # green_trainer_table(0.75)
+
+    # st.write("---")
+    # the_mother_pareto_front()
 
     st.write("---")
-    stochastic_table(0.75)
+    average_pareto_front()
 
-    st.write("---")
-    stochastic_table(0.5)
+    # st.write("---")
+    # the_mother_table()
 
-    st.write("---")
-    green_trainer_table(0.5)
-
-    st.write("---")
-    green_trainer_table(0.75)
-
-    st.write("---")
-    the_mother_pareto_front()
-
-    st.write("---")
-    the_mother_table()
+    # st.write("---")
+    # avg_table()
