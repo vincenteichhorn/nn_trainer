@@ -92,3 +92,5 @@ These scripts will create a `results.csv` file in each of the directories (`stat
 streamlit run ./ftt/results/plotting/pareto_front.py --server.fileWatcherType=poll
 streamlit run ./ftt/results/plotting/results_tables.py --server.fileWatcherType=poll
 ```
+---
+Copyright (C) 2025  Vincent Eichhorn
