@@ -151,8 +151,8 @@ Explore the folder for more scripts demonstrating various features of NN Trainer
 - [Evaluation Metrics](https://huggingface.co/docs/evaluate/index)
 
 
-## License
- Copyright (C) 2025  Vincent Eichhorn
+---
+Copyright (C) 2025  Vincent Eichhorn
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
