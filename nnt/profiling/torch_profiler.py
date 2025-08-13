@@ -74,6 +74,7 @@ class TorchProfiler(profile, Profiler):
                 row["is_annotation"] = getattr(event, "is_user_annotation", None)
                 row["device"] = getattr(event, "device_type", None).name
                 row["record_step"] = step
+                row["input_shapes"] = getattr(event, "input_shapes", None)
                 rows.append(row)
 
         df = pd.DataFrame(rows)

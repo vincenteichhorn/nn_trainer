@@ -88,14 +88,15 @@ def plot():
     eff_df = eff_df.drop(columns=drop_cols).reset_index()
     eff_df = eff_df.rename(columns={col: col.replace("forward_backward_optimizer_", "") for col in eff_df.columns})
     eff_df["flops_per_joule_mean"] = eff_df["flops_mean"] / eff_df["joules_mean"]
-    eff_df["flops_per_joule_sem"] = eff_df["joules_sem"] / 2
-    eff_df["flops_per_second_mean"] = eff_df["flops_mean"] / eff_df["time_mean"]
-    eff_df["flops_per_second_sem"] = eff_df["time_sem"] / 10
+    eff_df["flops_per_joule_sem"] = eff_df["joules_sem"]
+    eff_df["flops_per_second_mean"] = eff_df["flops_mean"] / (eff_df["time_mean"])
+    eff_df["flops_per_second_sem"] = eff_df["time_sem"]
     # Line plots for efficiency metrics
     cols = st.columns(2)
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     for i, metric in enumerate(["flops_per_joule", "flops_per_second"]):
         with cols[i]:
-            fig, ax = plt.subplots(figsize=(6, 5))
+            ax = axs[i]
             for rank in eff_df["rank"].unique():
                 rank_df = eff_df[eff_df["rank"] == rank]
                 ax.errorbar(
@@ -113,11 +114,14 @@ def plot():
                 )
             ax.set_xticks(rank_df["batch_size"])
             ax.set_xlabel("Batch Size", fontsize=14)
-            ax.set_ylabel("PFLOPs / Joule" if metric == "flops_per_joule" else "PFLOPs / Second", fontsize=14)
+            ax.set_ylabel("PFLOPs / kJ" if metric == "flops_per_joule" else "PFLOPs / Second", fontsize=14)
             ax.legend(title="", loc="upper left", fontsize=12)
-            plt.xticks(fontsize=12)
-            plt.yticks(fontsize=12)
-            st.pyplot(fig)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    # save fig as svg
+    fig.tight_layout()
+    fig.savefig(f"ftt/out/figs/efficiency_{model_select.replace("/", "_")}.svg", format="svg", bbox_inches="tight")
+    st.pyplot(fig)
 
     # Load memory results CSV
     df = pd.read_csv("ftt/out/energy/energy_lora_a100_w_memory.csv")
