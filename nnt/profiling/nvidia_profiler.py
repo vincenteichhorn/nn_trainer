@@ -363,7 +363,7 @@ class NvidiaProfiler(Profiler):
         df["record_step_id"] = df["record_step"].ne(df["record_step"].shift()).cumsum()
         gpu_ids = gpu_ids or [df["gpu_id"].unique()[0]]
         df = df[df["gpu_id"].isin(gpu_ids)]
-        df["time_interval"] = df["timestamp"].diff().dt.total_seconds().fillna(0)
+        df["time_interval"] = df.groupby("gpu_id")["timestamp"].diff().dt.total_seconds().fillna(0)
         df["energy_interval"] = df["power"] * df["time_interval"]
         record_steps = record_steps or list(df["record_step"].unique())
         df = df[df["record_step"].isin(record_steps)]

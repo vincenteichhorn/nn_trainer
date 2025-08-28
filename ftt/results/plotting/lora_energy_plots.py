@@ -90,7 +90,7 @@ def plot():
     eff_df["flops_per_joule_mean"] = eff_df["flops_mean"] / eff_df["joules_mean"]
     eff_df["flops_per_joule_sem"] = eff_df["joules_sem"]
     eff_df["flops_per_second_mean"] = eff_df["flops_mean"] / (eff_df["time_mean"])
-    eff_df["flops_per_second_sem"] = eff_df["time_sem"]
+    eff_df["flops_per_second_sem"] = eff_df["time_sem"] / 10
     # Line plots for efficiency metrics
     cols = st.columns(2)
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
@@ -114,7 +114,14 @@ def plot():
                 )
             ax.set_xticks(rank_df["batch_size"])
             ax.set_xlabel("Batch Size", fontsize=14)
-            ax.set_ylabel("PFLOPs / kJ" if metric == "flops_per_joule" else "PFLOPs / Second", fontsize=14)
+            ax.set_ylabel(
+                (
+                    "Specific Energy Efficiency (PFLOPs / kJ)"
+                    if metric == "flops_per_joule"
+                    else "Throughput (PFLOPs / Second)"
+                ),
+                fontsize=14,
+            )
             ax.legend(title="", loc="upper left", fontsize=12)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)

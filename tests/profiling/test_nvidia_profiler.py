@@ -1,6 +1,8 @@
 import time
 import pytest
 from datetime import datetime
+
+import torch
 from nnt.profiling.nvidia_profiler import NvidiaProfiler
 from plotly import graph_objects as go
 
@@ -100,6 +102,7 @@ def test_from_cache(monkeypatch, dummy_data):
     assert prof.data == dummy_data
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="NVML not available")
 def test_run_profiler():
     chache_file = "./tests/nvidia_profiler_test.csv"
     with NvidiaProfiler(cache_file=chache_file, force_cache=True, interval=10) as profiler:

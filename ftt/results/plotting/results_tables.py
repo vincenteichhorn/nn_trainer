@@ -1357,7 +1357,10 @@ def gt_comparison():
             #         color=color,
             #     )
         ax_.set_xlabel("Configuration", fontsize=12)
-        ax_.set_ylabel("PFLOPs / kJ" if metric == "flops_per_joule" else "PFLOPs / Second", fontsize=12)
+        ax_.set_ylabel(
+            "Specific Energy Efficiency (PFLOPs / kJ)" if metric == "flops_per_joule" else "Throughput (PFLOPs / Second)",
+            fontsize=12,
+        )
         # Place legend outside and center top for the first three columns
         if metric == "flops_per_joule":
             ax_.legend(title="", loc="upper center", bbox_to_anchor=(1.2, 1.15), fontsize=10, ncol=3)
@@ -1397,7 +1400,7 @@ if __name__ == "__main__":
     # green_trainer_table(0.75)
 
     # st.write("---")
-    # the_mother_pareto_front()
+    the_mother_pareto_front()
 
     # st.write("---")
     # average_pareto_front()
@@ -1411,4 +1414,4 @@ if __name__ == "__main__":
     # st.write("---")
     # ds_size_performance_plot()
 
-    gt_comparison()
+    # gt_comparison()
